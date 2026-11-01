@@ -1,0 +1,1 @@
+{"rules":{"couples":{"$code":{".read":"auth != null",".write":"auth != null","rooms":{"$room":{"chat":{".indexOn":["ts"]}}}}}}}
