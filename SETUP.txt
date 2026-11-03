@@ -47,3 +47,8 @@ PART 5 — LIMITATIONS OF THE FREE MVP
 
 DEPLOYMENT
 Merge the reviewed security/free-firebase-mvp branch into main only after testing. GitHub Pages deploys from main. Firebase rules are a separate manual publish step and remain locked until you publish reviewed rules.
+
+LATEST AUTOMATED TEST STATUS
+- Firebase Emulator suite: 7 of 7 tests passed in GitHub Actions.
+- npm audit for committed project dependencies: 0 vulnerabilities.
+- This does not validate production schema compatibility or guarantee server-side two-player enforcement.
