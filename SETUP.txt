@@ -17,7 +17,7 @@ PART 1 — CHECK YOUR EXISTING FIREBASE PROJECT
 
 PART 2 — REVIEW THE RULES BEFORE PUBLISHING
 1. Open database.rules.json in this branch.
-2. The rules restrict access to authenticated users who know the high-entropy room code, restrict player writes to that user's own UID, validate chat author and message length, and set a two-entry limit on live presence.
+2. The rules restrict access to authenticated users who know the high-entropy room code, restrict player writes to that user's own UID, validate chat author and message length, and validate presence records. The free rules cannot enforce a strict two-player cap.
 3. These rules are best-effort client-only protection. They do not create server-verified invitations, prevent invite sharing, or provide strong server-side rate limiting.
 4. Test the rules with the Firebase Emulator or Rules Playground before publishing. Do not publish them if any test fails.
 5. Only after review and successful tests, copy database.rules.json into Firebase Console → Realtime Database → Rules → Publish.
@@ -38,7 +38,7 @@ App Check can reduce requests from unverified clients, but it is not a replaceme
 
 PART 5 — LIMITATIONS OF THE FREE MVP
 - The invitation code is a shared bearer secret, not a server-issued account invitation.
-- The two-player cap applies to live presence records only; stale/offline data and malicious clients require testing.
+- There is no server-enforced two-player cap in this free setup; a third authenticated user who knows the invitation can join.
 - A malicious authenticated user who has the invite code can still abuse allowed room operations within the rules.
 - No server-side rate limiting, moderation service, trusted invite revocation, or guaranteed abuse prevention.
 - Free Firebase quotas can be exhausted; services may stop until quotas reset.
