@@ -63,7 +63,7 @@ test('chat validates author, name, and message length', async () => {
   await assertSucceeds(remove(mine));
 });
 
-test('shared world and house accept valid data and reject excessive items', async () => {
+test('shared world and house accept valid data and reject malformed data', async () => {
   const worldPath = 'couples/' + code + '/db/shared/world';
   await assertSucceeds(set(ref(db('alice'), worldPath), { disc:{island:1}, pins:[{id:'pin1'}], rev:Date.now() }));
   await assertFails(set(ref(db('alice'), worldPath), { disc:{}, rev:1 }));
