@@ -16,5 +16,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - run: npm install
+      - run: npm install --package-lock-only
+      - run: npm ci
+      - run: npm audit --audit-level=high
       - run: npx firebase-tools emulators:exec --only database --project demo-loveworld-security "npm test"
