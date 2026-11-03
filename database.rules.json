@@ -40,7 +40,7 @@
               ".read": "auth != null",
               ".indexOn": ["ts"],
               "$message": {
-                ".write": "auth != null && !data.exists() && newData.child('p').val() === auth.uid",
+                ".write": "auth != null && ((!newData.exists() && data.child('p').val() === auth.uid) || (!data.exists() && newData.child('p').val() === auth.uid))",
                 ".validate": "newData.hasChildren(['p', 'd', 'ts']) && newData.child('d').hasChildren(['n', 't']) && newData.child('d').child('n').isString() && newData.child('d').child('n').val().length <= 14 && newData.child('d').child('t').isString() && newData.child('d').child('t').val().length <= 120 && newData.child('ts').isNumber()"
               }
             }
