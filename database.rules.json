@@ -32,7 +32,7 @@
               ".read": "auth != null",
               "$uid": {
                 ".write": "auth != null && auth.uid === $uid",
-                ".validate": "newData.hasChildren(['n', 'a', 'x', 'z', 'y', 'r', 's', 'v', 'q', 'u']) && newData.child('n').isString() && newData.child('n').val().length <= 14 && newData.child('a').numChildren() == 4 && newData.child('x').isNumber() && newData.child('z').isNumber() && newData.child('y').isNumber() && newData.child('r').isNumber() && newData.child('s').isString() && newData.child('v').isNumber() && newData.child('q').isNumber() && newData.child('u').val() === auth.uid"
+                ".validate": "newData.hasChildren(['n', 'a', 'x', 'z', 'y', 'r', 's', 'v', 'q', 'u']) && newData.child('n').isString() && newData.child('n').val().length <= 14 && newData.child('a').hasChildren(['0', '1', '2', '3']) && newData.child('x').isNumber() && newData.child('z').isNumber() && newData.child('y').isNumber() && newData.child('r').isNumber() && newData.child('s').isString() && newData.child('v').isNumber() && newData.child('q').isNumber() && newData.child('u').val() === auth.uid"
               }
             },
             "chat": {
