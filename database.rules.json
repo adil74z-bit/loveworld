@@ -10,19 +10,19 @@
             "world": {
               ".read": "auth != null",
               ".write": "auth != null",
-              ".validate": "newData.hasChildren(['disc', 'pins', 'rev']) && newData.child('pins').numChildren() <= 100 && newData.child('rev').isNumber()"
+              ".validate": "newData.hasChildren(['disc', 'pins', 'rev']) && newData.child('rev').isNumber()"
             },
             "house": {
               ".read": "auth != null",
               ".write": "auth != null",
-              ".validate": "newData.hasChildren(['wall', 'floor', 'mood', 'items', 'rev']) && newData.child('items').numChildren() <= 60 && newData.child('wall').isNumber() && newData.child('floor').isNumber() && newData.child('rev').isNumber() && newData.child('mood').val().matches(/^(day|evening|night)$/)"
+              ".validate": "newData.hasChildren(['wall', 'floor', 'mood', 'items', 'rev']) && newData.child('wall').isNumber() && newData.child('floor').isNumber() && newData.child('rev').isNumber() && newData.child('mood').val().matches(/^(day|evening|night)$/)"
             }
           },
           "players": {
             "$uid": {
               ".read": "auth != null",
               ".write": "auth != null && auth.uid === $uid",
-              ".validate": "newData.hasChildren(['n', 'a', 'x', 'z', 's', 't']) && newData.child('n').isString() && newData.child('n').val().length <= 14 && newData.child('a').numChildren() == 4 && newData.child('x').isNumber() && newData.child('z').isNumber() && newData.child('t').isNumber()"
+              ".validate": "newData.hasChildren(['n', 'a', 'x', 'z', 's', 't']) && newData.child('n').isString() && newData.child('n').val().length <= 14 && newData.child('a').hasChildren(['0', '1', '2', '3']) && newData.child('x').isNumber() && newData.child('z').isNumber() && newData.child('t').isNumber()"
             }
           }
         },
@@ -30,7 +30,6 @@
           "$room": {
             "presence": {
               ".read": "auth != null",
-              ".validate": "newData.numChildren() <= 2",
               "$uid": {
                 ".write": "auth != null && auth.uid === $uid",
                 ".validate": "newData.hasChildren(['n', 'a', 'x', 'z', 'y', 'r', 's', 'v', 'q', 'u']) && newData.child('n').isString() && newData.child('n').val().length <= 14 && newData.child('a').numChildren() == 4 && newData.child('x').isNumber() && newData.child('z').isNumber() && newData.child('y').isNumber() && newData.child('r').isNumber() && newData.child('s').isString() && newData.child('v').isNumber() && newData.child('q').isNumber() && newData.child('u').val() === auth.uid"
