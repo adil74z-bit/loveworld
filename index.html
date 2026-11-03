@@ -2111,7 +2111,7 @@ async function sha(txt) {
   return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 async function tryEnter() {
-  const code = $('codeIn').value.trim().toLowerCase(), name = $('nameIn0').value.trim().slice(0, 14);
+  const code = $('codeIn').value.trim(), name = $('nameIn0').value.trim().slice(0, 14);
   const msg = $('gateMsg');
   if (name.length < 2) { msg.textContent = 'Please type your name first.'; return; }
   if (!/^[A-Za-z0-9_-]{32,64}$/.test(code)) {
