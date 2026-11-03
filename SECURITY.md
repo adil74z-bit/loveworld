@@ -8,7 +8,7 @@
 - Kept database rules separate from GitHub Pages deployment. They are not published to Firebase automatically.
 
 ## Threat model and limits
-This is a best-effort free client-only MVP, not a server-trusted access-control system. The invitation is a bearer secret: anyone who gets it can enter. Firebase rules can validate authenticated UID and data shape, but cannot reliably implement server-issued invitations, revocation, moderation, or robust rate limits without trusted backend code. The two-entry presence validation should be tested with simultaneous joins in the Firebase Emulator before relying on it.
+This is a best-effort free client-only MVP, not a server-trusted access-control system. The invitation is a bearer secret: anyone who gets it can enter. Firebase rules can validate authenticated UID and data shape, but cannot reliably implement server-issued invitations, revocation, moderation, or robust rate limits without trusted backend code. Realtime Database Rules cannot reliably enforce a two-player presence cap because the rule language has no supported child-count function. Emulator tests explicitly demonstrate that a third authenticated participant can write presence. Treat the two-player limit as a UI convention only until a trusted server can reserve slots atomically.
 
 ## Before enabling
 1. Keep production RTDB rules locked.
