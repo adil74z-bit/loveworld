@@ -21,7 +21,8 @@ after(async () => env.cleanup());
 
 function db(uid) { return env.authenticatedContext(uid).database(); }
 function presence(uid) {
-  return { n:'Adil', a:[1,0,1,0], x:1, z:2, y:0, r:0, s:'w', v:0, q:0, u:uid, e:null };
+  // Exact field shape emitted by Net.presence() in the production game.
+  return { n:'Adil', a:[1,0,1,0], x:1.2, z:-2.4, y:0.15, r:0.75, s:'w', v:0, q:0, u:uid, e:null };
 }
 function player() {
   return { n:'Adil', a:[1,0,1,0], x:1, z:2, s:'w', t:Date.now() };
@@ -65,9 +66,9 @@ test('chat validates author, name, and message length', async () => {
 
 test('shared world and house accept valid data and reject malformed data', async () => {
   const worldPath = 'couples/' + code + '/db/shared/world';
-  await assertSucceeds(set(ref(db('alice'), worldPath), { disc:{island:1}, pins:[{id:'pin1'}], rev:Date.now() }));
+  await assertSucceeds(set(ref(db('alice'), worldPath), { disc:{beach:1, villa:1}, pins:[{id:'pin1',x:2,z:3,t:'Meet me',e:'📍',by:'Adil'}], rev:Date.now() }));
   await assertFails(set(ref(db('alice'), worldPath), { disc:{}, rev:1 }));
   const housePath = 'couples/' + code + '/db/shared/house';
-  await assertSucceeds(set(ref(db('alice'), housePath), { wall:1, floor:0, mood:'evening', items:[{id:'chair'}], rev:Date.now() }));
+  await assertSucceeds(set(ref(db('alice'), housePath), { wall:1, floor:0, mood:'evening', items:[{t:2,x:1.5,z:-2,r:1,c:3}], rev:Date.now() }));
   await assertFails(set(ref(db('alice'), housePath), { wall:'invalid', floor:0, mood:'evening', items:[{id:'chair'}], rev:Date.now() }));
 });
