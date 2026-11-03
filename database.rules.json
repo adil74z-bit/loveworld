@@ -15,7 +15,7 @@
             "house": {
               ".read": "auth != null",
               ".write": "auth != null",
-              ".validate": "newData.hasChildren(['wall', 'floor', 'mood', 'items', 'rev']) && newData.child('items').numChildren() <= 80 && newData.child('rev').isNumber() && newData.child('mood').val().matches(/^(day|evening|night)$/)"
+              ".validate": "newData.hasChildren(['wall', 'floor', 'mood', 'items', 'rev']) && newData.child('items').numChildren() <= 60 && newData.child('wall').isNumber() && newData.child('floor').isNumber() && newData.child('rev').isNumber() && newData.child('mood').val().matches(/^(day|evening|night)$/)"
             }
           },
           "players": {
