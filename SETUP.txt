@@ -1,33 +1,54 @@
-LOVE WORLD - SETUP (sirf ek baar, ~15 minute, sab FREE)
-=========================================================
-Zaroori: phone ke browser (Chrome) mein "Desktop site" ON kar lo - GitHub aur Firebase ke pages aasan ho jaate hain.
+LOVE WORLD — FREE FIREBASE SECURITY MVP
+=========================================
 
-PART 1 - Firebase (cloud save + online saath khelna)
-1. console.firebase.google.com kholo -> Google account se login.
-2. "Create a project" -> naam: loveworld -> Analytics OFF -> Create.
-3. Left menu: Build -> Authentication -> Get started -> "Anonymous" -> Enable -> Save.
-4. Left menu: Build -> Realtime Database -> Create Database -> location koi bhi -> "Start in locked mode" -> Enable.
-5. Realtime Database ke upar "Rules" tab -> sab purana mita ke database.rules.json file ka poora text paste karo -> Publish.
-6. Project Overview (ghar ka icon) -> "</>" (Web) icon -> app nickname: love -> Register app.
-   Wahan firebaseConfig dikhega (apiKey, authDomain, databaseURL, projectId, appId). Isko copy karke rakho.
-   NOTE: databaseURL na dikhe to Realtime Database page ke upar jo https://...firebaseio.com link hai wahi use karo.
+IMPORTANT
+- This branch contains the proposed security update. It does NOT change your live GitHub Pages site until you merge it into main.
+- Keep your Firebase Realtime Database rules locked until you have reviewed and tested the new rules.
+- Do NOT use the old shared code 2025. The old short-code gate has been removed.
+- The new invitation code is a 24-byte random token (192 bits), shown as 32 URL-safe characters. Generate it once, copy it, and share privately with only your partner. Both players must enter exactly the same code.
+- The code is a bearer invitation: anyone who obtains it can access that room. If it leaks, generate a new code and stop using the old one.
 
-PART 2 - GitHub (game ki website)
-1. github.com -> free account banao.
-2. "+" -> New repository -> naam: loveworld -> Public -> Create.
-3. "uploading an existing file" -> ZIP ko pehle phone mein Extract kar lo (Files app -> zip -> Extract), phir saari files choose karke upload karo (index.html, sw.js, manifest.json, icon-192.png, icon-512.png, firebase-config.js, database.rules.json) -> Commit changes.
-4. Repo ke Settings -> Pages -> Source: "Deploy from a branch" -> Branch: main, folder: / (root) -> Save.
-5. 1-2 minute baad wahi page tumhara link dega: https://TUMHARA-NAAM.github.io/loveworld/
+PART 1 — CHECK YOUR EXISTING FIREBASE PROJECT
+1. Open https://console.firebase.google.com/
+2. Select project loveworld-57321.
+3. Authentication → Sign-in method → confirm Anonymous is enabled.
+4. Realtime Database → Rules → keep the current locked rules for now.
+5. Never paste public read/write rules. Never put a service-account key or Firebase Admin credentials in this repository.
 
-PART 3 - Config jodna
-1. GitHub repo mein firebase-config.js kholo -> pencil (edit) icon.
-2. PASTE_... wali values Firebase ki asli values se badlo (quotes " " rehne do) -> Commit changes.
-3. 1-2 minute ruko.
+PART 2 — REVIEW THE RULES BEFORE PUBLISHING
+1. Open database.rules.json in this branch.
+2. The rules restrict access to authenticated users who know the high-entropy room code, restrict player writes to that user's own UID, validate chat author and message length, and validate presence records. The free rules cannot enforce a strict two-player cap.
+3. These rules are best-effort client-only protection. They do not create server-verified invitations, prevent invite sharing, or provide strong server-side rate limiting.
+4. Test the rules with the Firebase Emulator or Rules Playground before publishing. Do not publish them if any test fails.
+5. Only after review and successful tests, copy database.rules.json into Firebase Console → Realtime Database → Rules → Publish.
 
-PART 4 - Khelna
-- Dono apne phone mein link kholo. Name likho + secret code 2025 -> dono ek hi island pe milenge.
-- Chrome menu -> "Add to Home screen" = app jaisa icon.
-- Android APK chahiye ho: pwabuilder.com -> apna link daalo -> Package for Android -> Download.
-- Ek offline ho to uska avatar island pe soya hua dikhta hai; house/decor sab save rehta hai.
+PART 3 — INVITATION CODE
+1. Open the updated Love World site after this branch is merged and deployed.
+2. Click Generate secure code.
+3. Click Copy code and send it privately to your partner.
+4. Both players enter the same code. Do not post it publicly or put it in screenshots.
+5. If you lose the code, generate a new one; this version has no server-side invite recovery or revocation.
 
-SECURITY: code 2025 chhota hai. Zyada private chahiye to mujhe bolo, lamba code laga dunga.
+PART 4 — OPTIONAL FREE APP CHECK
+App Check can reduce requests from unverified clients, but it is not a replacement for Authentication or Database Rules.
+1. Firebase Console → App Check → register the Love World web app with reCAPTCHA v3.
+2. Configure the reCAPTCHA site key in the web app's App Check initialization before enforcing it.
+3. First test in monitoring mode. Only enforce Realtime Database after confirming legitimate sessions receive valid App Check tokens.
+4. Never confuse the public reCAPTCHA site key with a secret key. Do not commit private server keys.
+
+PART 5 — LIMITATIONS OF THE FREE MVP
+- The invitation code is a shared bearer secret, not a server-issued account invitation.
+- There is no server-enforced two-player cap in this free setup; a third authenticated user who knows the invitation can join.
+- A malicious authenticated user who has the invite code can still abuse allowed room operations within the rules.
+- No server-side rate limiting, moderation service, trusted invite revocation, or guaranteed abuse prevention.
+- Free Firebase quotas can be exhausted; services may stop until quotas reset.
+- Voice chat is not implemented by these changes.
+- Do not describe this as fully secure or production-hardened.
+
+DEPLOYMENT
+Merge the reviewed security/free-firebase-mvp branch into main only after testing. GitHub Pages deploys from main. Firebase rules are a separate manual publish step and remain locked until you publish reviewed rules.
+
+LATEST AUTOMATED TEST STATUS
+- Firebase Emulator suite: 7 of 7 tests passed in GitHub Actions.
+- npm audit for committed project dependencies: 0 vulnerabilities.
+- This does not validate production schema compatibility or guarantee server-side two-player enforcement.
