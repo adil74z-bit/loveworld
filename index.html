@@ -31,7 +31,9 @@ button { cursor: pointer; }
 .fld { display: grid; gap: 4px; text-align: left; font-size: 13px; color: var(--muted); }
 .fld input, .row input { width: 100%; padding: 13px 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, .08); font-size: 18px; outline: none; user-select: text; -webkit-user-select: text; }
 .fld input:focus, .row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 107, 139, .25); }
-#codeIn { letter-spacing: 6px; text-align: center; font-size: 24px; }
+#codeIn { letter-spacing: 2px; text-align: center; font-size: 16px; }
+.code-actions { display: flex; gap: 8px; }
+.code-actions button { flex: 1; border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px; background: rgba(255,255,255,.1); font-size: 13px; }
 .pri { border: 0; border-radius: 14px; padding: 13px 18px; font-size: 17px; font-weight: 600; background: linear-gradient(135deg, #ff6b8b, #ff9a6b); color: #2a1020; }
 .pri:active { transform: scale(.97); }
 #goBtn { width: 100%; }
@@ -126,7 +128,8 @@ button { cursor: pointer; }
     <h1>Love <span>World</span></h1>
     <p>Only the two of us can come in.</p>
     <label class="fld">Your name<input id="nameIn0" maxlength="14" autocomplete="off" placeholder="Adil"></label>
-    <label class="fld">Secret code<input id="codeIn" type="password" inputmode="numeric" autocomplete="off" maxlength="24" placeholder="&bull;&bull;&bull;&bull;"></label>
+    <label class="fld">Private invitation code<input id="codeIn" type="password" autocomplete="off" maxlength="64" placeholder="Generate or paste your 32-character code"></label>
+    <div class="code-actions"><button type="button" id="makeCodeBtn">Generate secure code</button><button type="button" id="copyCodeBtn">Copy code</button></div>
     <div id="gateMsg" role="status"></div>
     <button class="pri" id="goBtn">Enter our world</button>
   </div>
@@ -265,7 +268,7 @@ button { cursor: pointer; }
   };
 })();
 
-const CODE_HASH='753717e024cf15d07b431a41b3f0c37f55dae0449694eef8c6daf580269b3ecc', CODE_HASH_FALLBACK='xe68c298c';
+
 'use strict';
 /* ============ CORE: math, noise, zones, terrain ============ */
 const TAU = Math.PI * 2;
@@ -2102,20 +2105,21 @@ const Net = {
 };
 
 /* ---------- start ---------- */
-const GATE_SALT = 'lw-gate-';
 async function sha(txt) {
-  try { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt)); return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join(''); }
-  catch (e) { let h = 5381; for (let i = 0; i < txt.length; i++) h = ((h << 5) + h + txt.charCodeAt(i)) | 0; return 'x' + (h >>> 0).toString(16).padStart(8, '0'); }
+  if (!window.crypto || !crypto.subtle) throw new Error('Secure browser crypto is required. Please open Love World using its HTTPS link.');
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+  return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 async function tryEnter() {
   const code = $('codeIn').value.trim().toLowerCase(), name = $('nameIn0').value.trim().slice(0, 14);
   const msg = $('gateMsg');
   if (name.length < 2) { msg.textContent = 'Please type your name first.'; return; }
-  const h = await sha(GATE_SALT + code);
-  if (h !== CODE_HASH && !(h.length === 9 && h === CODE_HASH_FALLBACK)) {
-    msg.textContent = 'That is not our secret code.'; $('gate').classList.remove('shake'); void $('gate').offsetWidth; $('gate').classList.add('shake'); return;
+  if (!/^[A-Za-z0-9_-]{32,64}$/.test(code)) {
+    msg.textContent = 'Use a generated invitation code (at least 32 characters).'; $('gate').classList.remove('shake'); void $('gate').offsetWidth; $('gate').classList.add('shake'); return;
   }
-  lsSet('lw:name', name); S.code = code; S.codeKey = (await sha('key-' + code)).slice(0, 10).replace(/[^a-z0-9]/g, 'z');
+  try { S.code = code; S.codeKey = await sha('loveworld-room-v1:' + code); }
+  catch (e) { msg.textContent = e.message || 'Secure code check failed.'; return; }
+  lsSet('lw:name', name);
   $('gateCard').hidden = true; $('loading').hidden = false;
   setTimeout(() => startGame(name), 60);
 }
@@ -2157,7 +2161,19 @@ function bindUi() {
 }
 window.addEventListener('DOMContentLoaded', () => {
   const n = lsGet('lw:name'); if (n) $('nameIn0').value = n;
-  $('goBtn').onclick = tryEnter; $('codeIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryEnter(); });
+  $('goBtn').onclick = tryEnter;
+  $('makeCodeBtn').onclick = () => {
+    const bytes = new Uint8Array(24); crypto.getRandomValues(bytes);
+    let raw = ''; bytes.forEach((b) => { raw += String.fromCharCode(b); });
+    const token = btoa(raw).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '');
+    $('codeIn').value = token; $('codeIn').type = 'text'; $('gateMsg').textContent = 'New private code created. Copy it and share it only with your partner.';
+  };
+  $('copyCodeBtn').onclick = async () => {
+    const code = $('codeIn').value.trim(); if (!code) { $('gateMsg').textContent = 'Generate or paste a code first.'; return; }
+    try { await navigator.clipboard.writeText(code); $('gateMsg').textContent = 'Invitation code copied.'; }
+    catch (e) { $('codeIn').focus(); $('codeIn').select(); $('gateMsg').textContent = 'Select and copy the code manually.'; }
+  };
+  $('codeIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryEnter(); });
 });
 
 </script>
