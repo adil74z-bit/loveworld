@@ -140,6 +140,7 @@ button { cursor: pointer; }
 #roomView .code-actions button,.paste-link,.back-link{border:1px solid rgba(255,255,255,.42);border-radius:999px;padding:12px 15px;background:rgba(34,19,48,.48);color:#fff;font-size:13px;backdrop-filter:blur(10px)}
 #roomView .paste-link{display:block;margin:10px auto 0;border:0;background:transparent;color:#ffe0ed;text-decoration:underline}
 #roomView .back-link{margin-bottom:22px;padding:8px 14px}
+.character-pick{display:flex;gap:10px;margin:8px 0 14px}.character-pick button{flex:1;padding:12px;border:1px solid rgba(255,255,255,.4);border-radius:14px;background:rgba(34,19,48,.5);color:#fff;font-size:15px}.character-pick button.selected{background:linear-gradient(110deg,#f25ca4,#ffb0b0);color:#38152c;border-color:transparent;font-weight:600}
 #roomView #goBtn{width:100%;margin-top:8px;border-radius:999px}
 #gateMsg{color:#ffe1ed}
 #loading{position:relative;z-index:2;width:min(92vw,520px);padding:30px 20px;text-align:center;justify-items:center;gap:12px;color:#fff}
@@ -175,6 +176,7 @@ button { cursor: pointer; }
       <h1 class="room-title">Join <span>Our Island</span></h1>
       <p>Enter your name and invitation code to meet your partner.</p>
       <label class="fld">Your name<input id="nameIn0" maxlength="14" autocomplete="off" placeholder="Your name"></label>
+      <label class="fld">Choose your character</label><div class="character-pick"><button type="button" data-sex="male" id="pickMale">♂ Boy</button><button type="button" data-sex="female" id="pickFemale">♀ Girl</button></div>
       <label class="fld">Private invitation code<input id="codeIn" type="password" autocomplete="off" maxlength="64" placeholder="Paste your invitation code"></label>
       <div class="code-actions">
         <button type="button" id="makeCodeBtn">✦ Generate Code</button>
@@ -222,6 +224,7 @@ button { cursor: pointer; }
 <div id="err" hidden></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
@@ -933,9 +936,9 @@ const EMOTES = [
   { id: 'cheer', e: '\u{1F389}', n: 'Cheer', dur: 3 },
 ];
 
-function defaultCfg(name) { return { n: name || 'Me', sk: 1, hs: 0, hc: 1, of: 0 }; }
+function defaultCfg(name) { return { n: name || 'Me', sex: lsGet('lw:sex') || 'male', sk: 1, hs: 0, hc: 1, of: 0 }; }
 
-function buildAvatar(cfg) {
+function buildProceduralAvatar(cfg) {
   const root = new THREE.Group();
   const body = new THREE.Group(); root.add(body);
   const o = OUTFITS[cfg.of % OUTFITS.length];
@@ -993,14 +996,39 @@ function buildAvatar(cfg) {
   return av;
 }
 
+function buildAvatar(cfg) { const av = buildProceduralAvatar(cfg); loadCharacterModel(av, cfg); return av; }
+function loadCharacterModel(av, cfg) {
+  if (!window.THREE || !THREE.GLTFLoader) return;
+  if (!loadCharacterModel.loader) loadCharacterModel.loader = new THREE.GLTFLoader();
+  const sex = cfg && cfg.sex === 'female' ? 'female' : 'male';
+  const url = 'assets/characters/' + sex + '.glb';
+  loadCharacterModel.loader.load(url, (gltf) => {
+    if (!av.root) return;
+    if (av.modelHolder) av.root.remove(av.modelHolder);
+    const holder = new THREE.Group(), model = gltf.scene;
+    const bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3());
+    const targetHeight = sex === 'female' ? 1.74 : 1.75;
+    const scale = targetHeight / Math.max(size.y, 0.001);
+    model.scale.setScalar(scale); model.position.y = -bounds.min.y * scale;
+    holder.add(model); av.root.add(holder);
+    av.modelHolder = holder; av.modelRoot = model; av.body.visible = false;
+    av.tag.position.y = 1.98;
+    av.mixer = new THREE.AnimationMixer(model); av.walkAction = null; av.runAction = null; av.activeAction = null;
+    (gltf.animations || []).forEach((clip) => {
+      const key = String(clip.name || '').toLowerCase();
+      if (key.indexOf('walk') >= 0) av.walkAction = av.mixer.clipAction(clip);
+      if (key.indexOf('run') >= 0) av.runAction = av.mixer.clipAction(clip);
+    });
+  }, undefined, (err) => { console.warn('Love World character model could not load:', url, err); });
+}
 function setAvatarCfg(av, cfg) {
   const parent = av.root.parent, pos = av.root.position.clone(), ry = av.root.rotation.y;
   const veh = av.vehicle, sit = av.sit, old = av.root;
-  const n = buildAvatar(cfg);
-  Object.assign(av, n);
+  const n = buildProceduralAvatar(cfg); Object.assign(av, n);
   av.sit = sit; av.vehicle = 0; av.vehGroup = null;
   av.root.position.copy(pos); av.root.rotation.y = ry;
   if (parent) { parent.remove(old); parent.add(av.root); }
+  loadCharacterModel(av, cfg);
   if (veh) { setVehicle(av, veh); if (veh === 3 && av.vehGroup) av.vehGroup.position.x = 0.35; }
 }
 
@@ -1033,6 +1061,13 @@ function setVehicle(av, id) {
 
 /* ---------- animation ---------- */
 function animAvatar(av, dt, spd, now) {
+  if (av.mixer) {
+    const wanted = spd > 0.12 ? ((spd > 5.5 && av.runAction) ? av.runAction : av.walkAction) : null;
+    if (wanted !== av.activeAction) { if (av.activeAction) av.activeAction.fadeOut(0.16); av.activeAction = wanted; if (wanted) wanted.reset().fadeIn(0.16).play(); }
+    av.mixer.update(dt);
+    if (av.emote && av.emoteSp) av.emoteSp.position.y = 2.18 + Math.sin(now * 5) * 0.06;
+    return;
+  }
   av.phase += dt * (2.2 + spd * 1.5);
   const body = av.body; let by = 0, bry = 0;
   let aLx = 0, aLz = 0, aRx = 0, aRz = 0, lLx = 0, lRx = 0;
@@ -1541,6 +1576,7 @@ function saveLocal() {
 function loadLocal(name) {
   let d = null; try { d = JSON.parse(lsGet('lw1:' + S.codeKey) || 'null'); } catch (e) { }
   S.cfg = (d && d.cfg) || defaultCfg(name);
+  if (!S.cfg.sex) S.cfg.sex = lsGet('lw:sex') || 'male';
   if (name) S.cfg.n = name;
   if (d) {
     if (typeof d.px === 'number') { S.px = d.px; S.pz = d.pz; }
@@ -2088,7 +2124,7 @@ const Net = {
   },
   presence() {
     const c = S.cfg;
-    return { n: c.n, a: [c.sk, c.hs, c.hc, c.of], x: +S.px.toFixed(1), z: +S.pz.toFixed(1), y: +S.py.toFixed(2), r: +S.ry.toFixed(2), s: sceneCode(), v: S.vehicle, q: S.sit ? 1 : 0, u: this.uid || '', e: this.em };
+    return { n: c.n, sex: c.sex || 'male', a: [c.sk, c.hs, c.hc, c.of], x: +S.px.toFixed(1), z: +S.pz.toFixed(1), y: +S.py.toFixed(2), r: +S.ry.toFixed(2), s: sceneCode(), v: S.vehicle, q: S.sit ? 1 : 0, u: this.uid || '', e: this.em };
   },
   pushNow() {
     if (!this.room) return; const o = this.presence(), j = JSON.stringify(o);
@@ -2101,14 +2137,14 @@ const Net = {
     if (!this.db || !this.players || !this.uid) return;
     if (!force && Date.now() - this.lastSave < 20000) return; this.lastSave = Date.now();
     const c = S.cfg;
-    this.players.doc(this.uid).set({ n: c.n, a: [c.sk, c.hs, c.hc, c.of], x: +S.px.toFixed(1), z: +S.pz.toFixed(1), s: sceneCode(), t: Date.now() }).catch(() => { });
+    this.players.doc(this.uid).set({ n: c.n, sex: c.sex || 'male', a: [c.sk, c.hs, c.hc, c.of], x: +S.px.toFixed(1), z: +S.pz.toFixed(1), s: sceneCode(), t: Date.now() }).catch(() => { });
   },
   syncPeers(peers) {
     const seen = new Set();
     peers.forEach((p) => {
       if (p.isMe || p.kind !== 'viewer') return; const pr = p.presence; if (!pr || !pr.n) return;
       seen.add(p.peer);
-      const a = pr.a || [1, 0, 1, 0], cfg = { n: String(pr.n).slice(0, 14), sk: a[0] | 0, hs: a[1] | 0, hc: a[2] | 0, of: a[3] | 0 }, ck = a.join(',') + cfg.n;
+      const a = pr.a || [1, 0, 1, 0], cfg = { n: String(pr.n).slice(0, 14), sex: pr.sex === 'female' ? 'female' : 'male', sk: a[0] | 0, hs: a[1] | 0, hc: a[2] | 0, of: a[3] | 0 }, ck = cfg.sex + a.join(',') + cfg.n;
       let o = others.get(p.peer);
       if (!o) {
         const av = buildAvatar(cfg); actorRoot.add(av.root);
@@ -2127,7 +2163,7 @@ const Net = {
     const live = new Set(); others.forEach((o) => { if (o.uid) live.add(o.uid); });
     this.pdocs.forEach((d, id) => {
       if (id === this.uid || live.has(id)) { const g = ghosts.get(id); if (g) { actorRoot.remove(g.av.root); ghosts.delete(id); } return; }
-      const a = d.a || [1, 0, 1, 0], cfg = { n: '\u{1F4A4} ' + String(d.n || 'Partner').slice(0, 14), sk: a[0] | 0, hs: a[1] | 0, hc: a[2] | 0, of: a[3] | 0 }, ck = a.join(',') + d.n;
+      const a = d.a || [1, 0, 1, 0], cfg = { n: '\u{1F4A4} ' + String(d.n || 'Partner').slice(0, 14), sex: d.sex === 'female' ? 'female' : 'male', sk: a[0] | 0, hs: a[1] | 0, hc: a[2] | 0, of: a[3] | 0 }, ck = cfg.sex + a.join(',') + d.n;
       let g = ghosts.get(id);
       if (!g) { g = { av: buildAvatar(cfg), ck, name: String(d.n || 'Partner') }; actorRoot.add(g.av.root); ghosts.set(id, g); }
       else if (g.ck !== ck) { setAvatarCfg(g.av, cfg); g.ck = ck; }
@@ -2217,6 +2253,11 @@ function bindUi() {
 }
 window.addEventListener('DOMContentLoaded', () => {
   const n = lsGet('lw:name'); if (n) $('nameIn0').value = n;
+  let pickedSex = lsGet('lw:sex') || 'male';
+  const paintSex = () => { $('pickMale').classList.toggle('selected', pickedSex === 'male'); $('pickFemale').classList.toggle('selected', pickedSex === 'female'); };
+  $('pickMale').onclick = () => { pickedSex = 'male'; lsSet('lw:sex', pickedSex); paintSex(); };
+  $('pickFemale').onclick = () => { pickedSex = 'female'; lsSet('lw:sex', pickedSex); paintSex(); };
+  paintSex();
   $('playBtn').onclick = () => { $('welcomeView').hidden = true; $('roomView').hidden = false; $('nameIn0').focus(); };
   $('roomBackBtn').onclick = () => { $('roomView').hidden = true; $('welcomeView').hidden = false; };
   $('pasteCodeBtn').onclick = async () => {
