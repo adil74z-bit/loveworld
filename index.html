@@ -157,6 +157,17 @@ button { cursor: pointer; }
 @media(max-width:560px){#gateCard{padding:22px 8px}#gateCard h1{font-size:clamp(38px,11vw,58px)}.reunion{height:140px}.reunion-person{font-size:78px}}
 @media(prefers-reduced-motion:reduce){.reunion-person,.reunion-heart,.loading-track span{animation:none}}
 
+
+/* Scroll fix: allow the private-room screen to scroll on short displays */
+#gate {
+  display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+#gateCard { margin: clamp(16px, 5vh, 48px) auto; }
+#loading { margin: 12vh auto; }
 </style></head><body>
 
 <div id="stage"></div>
