@@ -1576,7 +1576,7 @@ function saveLocal() {
 function loadLocal(name) {
   let d = null; try { d = JSON.parse(lsGet('lw1:' + S.codeKey) || 'null'); } catch (e) { }
   S.cfg = (d && d.cfg) || defaultCfg(name);
-  if (!S.cfg.sex) S.cfg.sex = lsGet('lw:sex') || 'male';
+  S.cfg.sex = lsGet('lw:sex') || S.cfg.sex || 'male';
   if (name) S.cfg.n = name;
   if (d) {
     if (typeof d.px === 'number') { S.px = d.px; S.pz = d.pz; }
