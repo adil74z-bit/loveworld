@@ -1008,6 +1008,63 @@ function buildProceduralAvatar(cfg) {
 }
 
 function buildAvatar(cfg) { const av = buildProceduralAvatar(cfg); loadCharacterModel(av, cfg); return av; }
+
+function addRigGarment(bone, geometry, material, position) {
+  if (!bone) return null;
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(position[0], position[1], position[2]);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  bone.add(mesh);
+  return mesh;
+}
+
+function applyGlbWardrobe(av, cfg, model) {
+  if (av.wardrobeGroup) {
+    av.wardrobeGroup.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) { if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose()); else o.material.dispose(); }
+    });
+    if (av.wardrobeGroup.parent) av.wardrobeGroup.parent.remove(av.wardrobeGroup);
+  }
+  const outfit = OUTFITS[(cfg.of | 0) % OUTFITS.length] || OUTFITS[0];
+  const female = cfg.sex === 'female';
+  const topColor = female ? ((cfg.of | 0) === 0 ? '#e99abb' : outfit.t) : ((cfg.of | 0) === 0 ? '#f5f4ef' : outfit.t);
+  const lowerColor = female ? ((cfg.of | 0) === 0 ? '#f7f4ee' : outfit.b) : ((cfg.of | 0) === 0 ? '#17191f' : outfit.b);
+  const shoeColor = (cfg.of | 0) === 0 ? (female ? '#f4f1ec' : '#17191f') : outfit.s;
+  const fabric = new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.88, metalness: 0.0 });
+  const lower = new THREE.MeshStandardMaterial({ color: lowerColor, roughness: 0.9, metalness: 0.0 });
+  const shoes = new THREE.MeshStandardMaterial({ color: shoeColor, roughness: 0.82, metalness: 0.0 });
+  const wardrobe = new THREE.Group();
+  wardrobe.name = 'LoveWorldRiggedWardrobe';
+  const bone = (name) => model.getObjectByName(name);
+
+  // The armature is authored in centimetres beneath its 0.01 root scale.
+  // Garment geometry is therefore authored in centimetres and parented to
+  // the matching skeleton bones so it follows walk/run motion.
+  if (female) {
+    addRigGarment(bone('Hips'), new THREE.CylinderGeometry(16.5, 31, 34, 18, 1, false), lower, [0, -11, 0]);
+    addRigGarment(bone('Hips'), new THREE.CylinderGeometry(18.5, 17, 40, 18, 1, false), fabric, [0, 19, 0]);
+    ['LeftArm', 'RightArm'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(5.4, 4.4, 25, 12), fabric, [0, 12.5, 0]));
+    ['LeftForeArm', 'RightForeArm'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(4.4, 3.7, 25, 12), fabric, [0, 12.5, 0]));
+  } else {
+    addRigGarment(bone('Hips'), new THREE.CylinderGeometry(18, 16.5, 40, 18, 1, false), fabric, [0, 19, 0]);
+    ['LeftArm', 'RightArm'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(6.2, 5.1, 13, 12), fabric, [0, 6.5, 0]));
+    ['LeftUpLeg', 'RightUpLeg'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(10.2, 8.4, 38, 12), lower, [0, 19, 0]));
+    ['LeftLeg', 'RightLeg'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(8.2, 6.5, 39, 12), lower, [0, 19.5, 0]));
+  }
+  ['LeftFoot', 'RightFoot'].forEach((name) => {
+    addRigGarment(bone(name), new THREE.BoxGeometry(12, 7, 23), shoes, [0, 1, 5]);
+  });
+
+  // Keep all generated garment meshes in a named group for cleanup and future
+  // wardrobe expansion. Bone parenting keeps each garment segment animated.
+  av.wardrobeGroup = wardrobe;
+  av.wardrobeMaterials = [fabric, lower, shoes];
+  // Garments are parented directly to bones; this holder tracks ownership only.
+  model.add(wardrobe);
+}
+
 function loadCharacterModel(av, cfg) {
   if (!window.THREE || !THREE.GLTFLoader) return;
   if (!loadCharacterModel.loader) loadCharacterModel.loader = new THREE.GLTFLoader();
@@ -1019,18 +1076,9 @@ function loadCharacterModel(av, cfg) {
 
     const holder = new THREE.Group();
     const model = gltf.scene;
-
-    // These GLBs contain a centimetre-based armature scaled by 0.01,
-    // while their skinned vertex positions are already authored in metres.
-    // Box3.setFromObject() only sees the undeformed geometry bounds here;
-    // it reports a height around 1-2 cm and scaling from it magnifies the rig
-    // roughly 100x. Preserve the GLB's internal armature/skeleton transforms.
-    // Apply only this small, known asset-height adjustment to the outer scene.
     const sourceHeight = sex === 'female' ? 1.68 : 1.80;
     const targetHeight = sex === 'female' ? 1.74 : 1.75;
     model.scale.setScalar(targetHeight / sourceHeight);
-
-    // Keep the authored root position; the mesh's authored feet start at y ~= 0.
     model.updateMatrixWorld(true);
     holder.add(model);
     av.root.add(holder);
@@ -1043,11 +1091,17 @@ function loadCharacterModel(av, cfg) {
     av.walkAction = null;
     av.runAction = null;
     av.activeAction = null;
+    av.idleBones = {};
+    ['Spine', 'Spine01', 'Spine02', 'neck', 'Head', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm'].forEach((name) => {
+      const b = model.getObjectByName(name);
+      if (b) av.idleBones[name] = { bone: b, x: b.rotation.x, y: b.rotation.y, z: b.rotation.z };
+    });
     (gltf.animations || []).forEach((clip) => {
       const key = String(clip.name || '').toLowerCase();
       if (key.indexOf('walk') >= 0) av.walkAction = av.mixer.clipAction(clip);
       if (key.indexOf('run') >= 0) av.runAction = av.mixer.clipAction(clip);
     });
+    applyGlbWardrobe(av, cfg, model);
   }, undefined, (err) => {
     console.warn('Love World character model could not load:', url, err);
   });
@@ -1096,6 +1150,26 @@ function animAvatar(av, dt, spd, now) {
     const wanted = spd > 0.12 ? ((spd > 5.5 && av.runAction) ? av.runAction : av.walkAction) : null;
     if (wanted !== av.activeAction) { if (av.activeAction) av.activeAction.fadeOut(0.16); av.activeAction = wanted; if (wanted) wanted.reset().fadeIn(0.16).play(); }
     av.mixer.update(dt);
+    if (!wanted && av.idleBones) {
+      const t = now || 0;
+      const idle = av.idleBones;
+      const spine = idle.Spine02;
+      const neck = idle.neck;
+      const head = idle.Head;
+      if (spine) spine.bone.rotation.x = spine.x + Math.sin(t * 1.35) * 0.012;
+      if (neck) neck.bone.rotation.y = neck.y + Math.sin(t * 0.7) * 0.018;
+      if (head) head.bone.rotation.x = head.x + Math.sin(t * 1.1 + 0.8) * 0.012;
+      ['LeftArm', 'RightArm'].forEach((name) => {
+        const item = idle[name];
+        if (item) item.bone.rotation.z = item.z + (name === 'LeftArm' ? -0.035 : 0.035) + Math.sin(t * 1.25) * 0.008;
+      });
+    } else if (av.idleBones) {
+      Object.values(av.idleBones).forEach((item) => {
+        item.bone.rotation.x = item.x;
+        item.bone.rotation.y = item.y;
+        item.bone.rotation.z = item.z;
+      });
+    }
     if (av.emote && av.emoteSp) av.emoteSp.position.y = 2.18 + Math.sin(now * 5) * 0.06;
     return;
   }
