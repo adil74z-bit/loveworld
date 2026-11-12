@@ -1014,23 +1014,43 @@ function loadCharacterModel(av, cfg) {
   const sex = cfg && cfg.sex === 'female' ? 'female' : 'male';
   const url = 'assets/characters/' + sex + '.glb';
   loadCharacterModel.loader.load(url, (gltf) => {
-    if (!av.root) return;
+    if (!av.root || !gltf || !gltf.scene) return;
     if (av.modelHolder) av.root.remove(av.modelHolder);
-    const holder = new THREE.Group(), model = gltf.scene;
-    const bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3());
+
+    const holder = new THREE.Group();
+    const model = gltf.scene;
+
+    // These GLBs contain a centimetre-based armature scaled by 0.01,
+    // while their skinned vertex positions are already authored in metres.
+    // Box3.setFromObject() only sees the undeformed geometry bounds here;
+    // it reports a height around 1-2 cm and scaling from it magnifies the rig
+    // roughly 100x. Preserve the GLB's internal armature/skeleton transforms.
+    // Apply only this small, known asset-height adjustment to the outer scene.
+    const sourceHeight = sex === 'female' ? 1.68 : 1.80;
     const targetHeight = sex === 'female' ? 1.74 : 1.75;
-    const scale = targetHeight / Math.max(size.y, 0.001);
-    model.scale.setScalar(scale); model.position.y = -bounds.min.y * scale;
-    holder.add(model); av.root.add(holder);
-    av.modelHolder = holder; av.modelRoot = model; av.body.visible = false;
+    model.scale.setScalar(targetHeight / sourceHeight);
+
+    // Keep the authored root position; the mesh's authored feet start at y ~= 0.
+    model.updateMatrixWorld(true);
+    holder.add(model);
+    av.root.add(holder);
+
+    av.modelHolder = holder;
+    av.modelRoot = model;
+    av.body.visible = false;
     av.tag.position.y = 1.98;
-    av.mixer = new THREE.AnimationMixer(model); av.walkAction = null; av.runAction = null; av.activeAction = null;
+    av.mixer = new THREE.AnimationMixer(model);
+    av.walkAction = null;
+    av.runAction = null;
+    av.activeAction = null;
     (gltf.animations || []).forEach((clip) => {
       const key = String(clip.name || '').toLowerCase();
       if (key.indexOf('walk') >= 0) av.walkAction = av.mixer.clipAction(clip);
       if (key.indexOf('run') >= 0) av.runAction = av.mixer.clipAction(clip);
     });
-  }, undefined, (err) => { console.warn('Love World character model could not load:', url, err); });
+  }, undefined, (err) => {
+    console.warn('Love World character model could not load:', url, err);
+  });
 }
 function setAvatarCfg(av, cfg) {
   const parent = av.root.parent, pos = av.root.position.clone(), ry = av.root.rotation.y;
