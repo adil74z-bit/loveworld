@@ -1904,6 +1904,11 @@ function updateMove(dt) {
 }
 
 /* ---------- camera ---------- */
+const cameraCollisionRay = new THREE.Raycaster();
+const cameraCollisionOrigin = new THREE.Vector3();
+const cameraCollisionDesired = new THREE.Vector3();
+const cameraCollisionDirection = new THREE.Vector3();
+
 function updateCamera(dt) {
   const r = renderXZ(S.px, S.pz);
   const ty = S.py + (S.sit ? 0.95 : 1.5);
@@ -1913,6 +1918,43 @@ function updateCamera(dt) {
   if (S.mode === 'world') {
     const gh = Math.max(terrainH(S.px + (cx - r[0]), S.pz + (cz - r[1])), 0);
     cy = Math.max(cy, gh + 0.7);
+
+    // Prevent the third-person camera from entering trees, buildings and
+    // landmark props. Terrain chunks contain the island's batched tree mesh;
+    // anchors contain the larger standalone world props.
+    cameraCollisionOrigin.set(r[0], ty + 0.12, r[1]);
+    cameraCollisionDesired.set(cx, cy, cz);
+    cameraCollisionDirection.subVectors(cameraCollisionDesired, cameraCollisionOrigin);
+    const wantedDistance = cameraCollisionDirection.length();
+    if (wantedDistance > 0.001) {
+      cameraCollisionDirection.normalize();
+      cameraCollisionRay.set(cameraCollisionOrigin, cameraCollisionDirection);
+      cameraCollisionRay.near = 0.3;
+      cameraCollisionRay.far = wantedDistance;
+      const targets = [];
+      if (chunkRoot) {
+        for (let i = 0; i < chunkRoot.children.length; i++) {
+          const obj = chunkRoot.children[i];
+          if (obj.visible) targets.push(obj);
+        }
+      }
+      for (let i = 0; i < anchors.length; i++) {
+        const obj = anchors[i];
+        if (!obj || !obj.visible || obj.isSprite) continue;
+        const dx = obj.position.x - r[0], dz = obj.position.z - r[1];
+        if (dx * dx + dz * dz < (wantedDistance + 12) * (wantedDistance + 12)) targets.push(obj);
+      }
+      const hits = cameraCollisionRay.intersectObjects(targets, true);
+      if (hits.length) {
+        const safeDistance = Math.max(0.85, hits[0].distance - 0.32);
+        if (safeDistance < wantedDistance) {
+          cameraCollisionDesired.copy(cameraCollisionOrigin).addScaledVector(cameraCollisionDirection, safeDistance);
+          cx = cameraCollisionDesired.x;
+          cy = cameraCollisionDesired.y;
+          cz = cameraCollisionDesired.z;
+        }
+      }
+    }
   } else {
     const it = INT[S.interior];
     cx = clamp(cx, -it.w / 2 + 0.5, it.w / 2 - 0.5); cz = clamp(cz, -it.d / 2 + 0.5, it.d / 2 - 0.5); cy = clamp(cy, 0.6, it.h - 0.4);
