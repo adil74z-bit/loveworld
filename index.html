@@ -1009,62 +1009,120 @@ function buildProceduralAvatar(cfg) {
 
 function buildAvatar(cfg) { const av = buildProceduralAvatar(cfg); loadCharacterModel(av, cfg); return av; }
 
-function addRigGarment(bone, geometry, material, position) {
+function lwBoneKey(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^mixamorig/, '');
+}
+function lwBuildBoneMap(model) {
+  const map = new Map();
+  model.traverse((o) => {
+    if (o.isBone) {
+      const key = lwBoneKey(o.name);
+      if (key && !map.has(key)) map.set(key, o);
+    }
+  });
+  return map;
+}
+function lwFindBone(map, aliases) {
+  for (const alias of aliases) {
+    const key = lwBoneKey(alias);
+    if (map.has(key)) return map.get(key);
+    for (const [name, bone] of map.entries()) if (name.endsWith(key)) return bone;
+  }
+  return null;
+}
+function lwAddBoneSegment(bone, child, material, radiusTop, radiusBottom, label) {
+  if (!bone || !child || !child.position) return null;
+  const delta = child.position.clone();
+  const length = delta.length();
+  if (!Number.isFinite(length) || length < 0.5) return null;
+  const geometry = new THREE.CylinderGeometry(radiusTop, radiusBottom, length * 1.08, 20, 1, false);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = 'LW_Garment_' + label;
+  mesh.position.copy(delta.multiplyScalar(0.5));
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), child.position.clone().normalize());
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  bone.add(mesh);
+  return mesh;
+}
+function lwAddBonePiece(bone, geometry, material, position, label) {
   if (!bone) return null;
   const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = 'LW_Garment_' + label;
   mesh.position.set(position[0], position[1], position[2]);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   bone.add(mesh);
   return mesh;
 }
-
 function applyGlbWardrobe(av, cfg, model) {
-  if (av.wardrobeGroup) {
-    av.wardrobeGroup.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) { if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose()); else o.material.dispose(); }
-    });
-    if (av.wardrobeGroup.parent) av.wardrobeGroup.parent.remove(av.wardrobeGroup);
-  }
-  const outfit = OUTFITS[(cfg.of | 0) % OUTFITS.length] || OUTFITS[0];
-  const female = cfg.sex === 'female';
-  const topColor = female ? ((cfg.of | 0) === 0 ? '#e99abb' : outfit.t) : ((cfg.of | 0) === 0 ? '#f5f4ef' : outfit.t);
-  const lowerColor = female ? ((cfg.of | 0) === 0 ? '#f7f4ee' : outfit.b) : ((cfg.of | 0) === 0 ? '#17191f' : outfit.b);
-  const shoeColor = (cfg.of | 0) === 0 ? (female ? '#f4f1ec' : '#17191f') : outfit.s;
-  const fabric = new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.88, metalness: 0.0 });
-  const lower = new THREE.MeshStandardMaterial({ color: lowerColor, roughness: 0.9, metalness: 0.0 });
-  const shoes = new THREE.MeshStandardMaterial({ color: shoeColor, roughness: 0.82, metalness: 0.0 });
-  const wardrobe = new THREE.Group();
-  wardrobe.name = 'LoveWorldRiggedWardrobe';
-  const bone = (name) => model.getObjectByName(name);
+  // Garments are children of rig bones, not of the model root. Remove the
+  // previous outfit from those bones explicitly before creating a new one.
+  (av.wardrobeMeshes || []).forEach((mesh) => {
+    if (mesh.parent) mesh.parent.remove(mesh);
+    if (mesh.geometry) mesh.geometry.dispose();
+  });
+  (av.wardrobeMaterials || []).forEach((mat) => mat.dispose());
+  av.wardrobeMeshes = [];
+  av.wardrobeMaterials = [];
 
-  // The armature is authored in centimetres beneath its 0.01 root scale.
-  // Garment geometry is therefore authored in centimetres and parented to
-  // the matching skeleton bones so it follows walk/run motion.
+  const index = Math.max(0, (cfg.of | 0)) % OUTFITS.length;
+  const outfit = OUTFITS[index] || OUTFITS[0];
+  const female = cfg.sex === 'female';
+  const defaultLook = index === 0;
+  const topColor = defaultLook ? (female ? '#e9a0bd' : '#f5f4ef') : outfit.t;
+  const lowerColor = defaultLook ? (female ? '#f7f2eb' : '#17191f') : outfit.b;
+  const shoeColor = defaultLook ? (female ? '#f4f1ec' : '#17191f') : outfit.s;
+  const topMat = new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.86 });
+  const lowerMat = new THREE.MeshStandardMaterial({ color: lowerColor, roughness: 0.9 });
+  const shoeMat = new THREE.MeshStandardMaterial({ color: shoeColor, roughness: 0.82 });
+  av.wardrobeMaterials.push(topMat, lowerMat, shoeMat);
+
+  const bones = lwBuildBoneMap(model);
+  const get = (...names) => lwFindBone(bones, names);
+  const add = (mesh) => { if (mesh) av.wardrobeMeshes.push(mesh); };
+  const hips = get('Hips');
+  const spine = get('Spine');
+  const spine1 = get('Spine1', 'Spine01');
+  const spine2 = get('Spine2', 'Spine02');
+  const neck = get('Neck');
+  const chestTop = spine2 || spine1 || neck;
+
+  // Torso clothing follows the actual rig segments. Bone-name matching
+  // tolerates Mixamo prefixes and punctuation differences.
+  add(lwAddBoneSegment(hips, spine, topMat, 17, 19, 'TorsoLower'));
+  add(lwAddBoneSegment(spine, spine1 || spine2, topMat, 18, 17, 'TorsoMid'));
+  add(lwAddBoneSegment(spine1 || spine, chestTop, topMat, 17, 15, 'TorsoUpper'));
+
+  const armPairs = [
+    [get('LeftArm'), get('LeftForeArm'), 'LeftUpperSleeve'],
+    [get('LeftForeArm'), get('LeftHand'), 'LeftLowerSleeve'],
+    [get('RightArm'), get('RightForeArm'), 'RightUpperSleeve'],
+    [get('RightForeArm'), get('RightHand'), 'RightLowerSleeve']
+  ];
+  armPairs.forEach(([bone, child, label]) => add(lwAddBoneSegment(bone, child, topMat, 6.8, 5.4, label)));
+
   if (female) {
-    addRigGarment(bone('Hips'), new THREE.CylinderGeometry(16.5, 31, 34, 18, 1, false), lower, [0, -11, 0]);
-    addRigGarment(bone('Hips'), new THREE.CylinderGeometry(18.5, 17, 40, 18, 1, false), fabric, [0, 19, 0]);
-    ['LeftArm', 'RightArm'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(5.4, 4.4, 25, 12), fabric, [0, 12.5, 0]));
-    ['LeftForeArm', 'RightForeArm'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(4.4, 3.7, 25, 12), fabric, [0, 12.5, 0]));
+    // A flared skirt is attached to the pelvis and follows hip motion.
+    add(lwAddBonePiece(hips, new THREE.CylinderGeometry(17, 34, 39, 28, 2, false), lowerMat, [0, -8, 0], 'Skirt'));
+    // Keep the original legs visible below the skirt; add fitted light sneakers.
   } else {
-    addRigGarment(bone('Hips'), new THREE.CylinderGeometry(18, 16.5, 40, 18, 1, false), fabric, [0, 19, 0]);
-    ['LeftArm', 'RightArm'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(6.2, 5.1, 13, 12), fabric, [0, 6.5, 0]));
-    ['LeftUpLeg', 'RightUpLeg'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(10.2, 8.4, 38, 12), lower, [0, 19, 0]));
-    ['LeftLeg', 'RightLeg'].forEach((name) => addRigGarment(bone(name), new THREE.CylinderGeometry(8.2, 6.5, 39, 12), lower, [0, 19.5, 0]));
+    [
+      [get('LeftUpLeg'), get('LeftLeg'), 'LeftTrouserUpper'],
+      [get('LeftLeg'), get('LeftFoot'), 'LeftTrouserLower'],
+      [get('RightUpLeg'), get('RightLeg'), 'RightTrouserUpper'],
+      [get('RightLeg'), get('RightFoot'), 'RightTrouserLower']
+    ].forEach(([bone, child, label]) => add(lwAddBoneSegment(bone, child, lowerMat, 10.5, 8.2, label)));
   }
-  ['LeftFoot', 'RightFoot'].forEach((name) => {
-    addRigGarment(bone(name), new THREE.BoxGeometry(12, 7, 23), shoes, [0, 1, 5]);
+
+  [['LeftFoot', 'LeftSneaker'], ['RightFoot', 'RightSneaker']].forEach(([name, label]) => {
+    const foot = get(name);
+    add(lwAddBonePiece(foot, new THREE.BoxGeometry(13, 7, 23), shoeMat, [0, 1, 5], label));
   });
 
-  // Keep all generated garment meshes in a named group for cleanup and future
-  // wardrobe expansion. Bone parenting keeps each garment segment animated.
-  av.wardrobeGroup = wardrobe;
-  av.wardrobeMaterials = [fabric, lower, shoes];
-  // Garments are parented directly to bones; this holder tracks ownership only.
-  model.add(wardrobe);
+  av.wardrobeBoneCount = bones.size;
+  console.info('[Love World] GLB wardrobe bones:', bones.size, 'garment pieces:', av.wardrobeMeshes.length, 'outfit:', outfit.n);
 }
-
 function loadCharacterModel(av, cfg) {
   if (!window.THREE || !THREE.GLTFLoader) return;
   if (!loadCharacterModel.loader) loadCharacterModel.loader = new THREE.GLTFLoader();
@@ -1092,9 +1150,16 @@ function loadCharacterModel(av, cfg) {
     av.runAction = null;
     av.activeAction = null;
     av.idleBones = {};
-    ['Spine', 'Spine01', 'Spine02', 'neck', 'Head', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm'].forEach((name) => {
-      const b = model.getObjectByName(name);
-      if (b) av.idleBones[name] = { bone: b, x: b.rotation.x, y: b.rotation.y, z: b.rotation.z };
+    const idleMap = lwBuildBoneMap(model);
+    [
+      ['Spine', ['Spine']], ['Spine01', ['Spine1', 'Spine01']],
+      ['Spine02', ['Spine2', 'Spine02']], ['neck', ['Neck']],
+      ['Head', ['Head']], ['LeftArm', ['LeftArm']],
+      ['RightArm', ['RightArm']], ['LeftForeArm', ['LeftForeArm']],
+      ['RightForeArm', ['RightForeArm']]
+    ].forEach(([key, aliases]) => {
+      const b = lwFindBone(idleMap, aliases);
+      if (b) av.idleBones[key] = { bone: b, x: b.rotation.x, y: b.rotation.y, z: b.rotation.z };
     });
     (gltf.animations || []).forEach((clip) => {
       const key = String(clip.name || '').toLowerCase();
