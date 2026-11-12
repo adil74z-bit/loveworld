@@ -1056,8 +1056,6 @@ function lwAddBonePiece(bone, geometry, material, position, label) {
   return mesh;
 }
 function applyGlbWardrobe(av, cfg, model) {
-  // Garments are children of rig bones, not of the model root. Remove the
-  // previous outfit from those bones explicitly before creating a new one.
   (av.wardrobeMeshes || []).forEach((mesh) => {
     if (mesh.parent) mesh.parent.remove(mesh);
     if (mesh.geometry) mesh.geometry.dispose();
@@ -1073,26 +1071,36 @@ function applyGlbWardrobe(av, cfg, model) {
   const topColor = defaultLook ? (female ? '#e9a0bd' : '#f5f4ef') : outfit.t;
   const lowerColor = defaultLook ? (female ? '#f7f2eb' : '#17191f') : outfit.b;
   const shoeColor = defaultLook ? (female ? '#f4f1ec' : '#17191f') : outfit.s;
-  const topMat = new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.86 });
-  const lowerMat = new THREE.MeshStandardMaterial({ color: lowerColor, roughness: 0.9 });
-  const shoeMat = new THREE.MeshStandardMaterial({ color: shoeColor, roughness: 0.82 });
+  const makeFabric = (color) => new THREE.MeshStandardMaterial({
+    color, roughness: 0.88, metalness: 0,
+    side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1
+  });
+  const topMat = makeFabric(topColor);
+  const lowerMat = makeFabric(lowerColor);
+  const shoeMat = makeFabric(shoeColor);
   av.wardrobeMaterials.push(topMat, lowerMat, shoeMat);
 
   const bones = lwBuildBoneMap(model);
   const get = (...names) => lwFindBone(bones, names);
-  const add = (mesh) => { if (mesh) av.wardrobeMeshes.push(mesh); };
+  const add = (mesh) => {
+    if (!mesh) return;
+    mesh.renderOrder = 3;
+    mesh.frustumCulled = false;
+    av.wardrobeMeshes.push(mesh);
+  };
   const hips = get('Hips');
   const spine = get('Spine');
   const spine1 = get('Spine1', 'Spine01');
   const spine2 = get('Spine2', 'Spine02');
   const neck = get('Neck');
-  const chestTop = spine2 || spine1 || neck;
 
-  // Torso clothing follows the actual rig segments. Bone-name matching
-  // tolerates Mixamo prefixes and punctuation differences.
-  add(lwAddBoneSegment(hips, spine, topMat, 17, 19, 'TorsoLower'));
-  add(lwAddBoneSegment(spine, spine1 || spine2, topMat, 18, 17, 'TorsoMid'));
-  add(lwAddBoneSegment(spine1 || spine, chestTop, topMat, 17, 15, 'TorsoUpper'));
+  // Actual GLB hierarchy is Hips -> Spine02 -> Spine01 -> Spine -> Neck.
+  // Previous code connected non-adjacent/reversed spine bones, placing the
+  // generated torso pieces in the wrong local coordinate spaces.
+  add(lwAddBoneSegment(hips, spine2, topMat, 19.5, 20.5, 'TorsoLower'));
+  add(lwAddBoneSegment(spine2, spine1, topMat, 20.5, 19.5, 'TorsoMid'));
+  add(lwAddBoneSegment(spine1, spine, topMat, 19.5, 17.5, 'TorsoUpper'));
+  if (spine && neck) add(lwAddBoneSegment(spine, neck, topMat, 15.5, 13.5, 'Collar'));
 
   const armPairs = [
     [get('LeftArm'), get('LeftForeArm'), 'LeftUpperSleeve'],
@@ -1100,28 +1108,34 @@ function applyGlbWardrobe(av, cfg, model) {
     [get('RightArm'), get('RightForeArm'), 'RightUpperSleeve'],
     [get('RightForeArm'), get('RightHand'), 'RightLowerSleeve']
   ];
-  armPairs.forEach(([bone, child, label]) => add(lwAddBoneSegment(bone, child, topMat, 6.8, 5.4, label)));
+  armPairs.forEach(([bone, child, label]) => add(lwAddBoneSegment(bone, child, topMat, 7.8, 6.2, label)));
 
   if (female) {
-    // A flared skirt is attached to the pelvis and follows hip motion.
-    add(lwAddBonePiece(hips, new THREE.CylinderGeometry(17, 34, 39, 28, 2, false), lowerMat, [0, -8, 0], 'Skirt'));
-    // Keep the original legs visible below the skirt; add fitted light sneakers.
+    // A knee-length flared skirt, centred on the pelvis and sized outside
+    // the original shorts so the dark base garment is no longer visible.
+    add(lwAddBonePiece(hips,
+      new THREE.CylinderGeometry(18.5, 34, 46, 32, 2, false),
+      lowerMat, [0, -15, 0], 'Skirt'));
   } else {
     [
       [get('LeftUpLeg'), get('LeftLeg'), 'LeftTrouserUpper'],
       [get('LeftLeg'), get('LeftFoot'), 'LeftTrouserLower'],
       [get('RightUpLeg'), get('RightLeg'), 'RightTrouserUpper'],
       [get('RightLeg'), get('RightFoot'), 'RightTrouserLower']
-    ].forEach(([bone, child, label]) => add(lwAddBoneSegment(bone, child, lowerMat, 10.5, 8.2, label)));
+    ].forEach(([bone, child, label]) => add(lwAddBoneSegment(bone, child, lowerMat, 12.5, 10.2, label)));
   }
 
+  // Foot bones point toward the toes along their local +Y axis.
   [['LeftFoot', 'LeftSneaker'], ['RightFoot', 'RightSneaker']].forEach(([name, label]) => {
     const foot = get(name);
-    add(lwAddBonePiece(foot, new THREE.BoxGeometry(13, 7, 23), shoeMat, [0, 1, 5], label));
+    add(lwAddBonePiece(foot, new THREE.BoxGeometry(14, 26, 9), shoeMat, [0, 7, 0], label));
   });
 
   av.wardrobeBoneCount = bones.size;
-  console.info('[Love World] GLB wardrobe bones:', bones.size, 'garment pieces:', av.wardrobeMeshes.length, 'outfit:', outfit.n);
+  console.info('[Love World] rigged wardrobe:', bones.size, 'bones,', av.wardrobeMeshes.length, 'pieces,', outfit.n);
+  if (bones.size < 20 || av.wardrobeMeshes.length < 8) {
+    console.warn('[Love World] incomplete GLB wardrobe rig; check skeleton aliases before hiding the procedural fallback.');
+  }
 }
 function loadCharacterModel(av, cfg) {
   if (!window.THREE || !THREE.GLTFLoader) return;
@@ -1154,8 +1168,8 @@ function loadCharacterModel(av, cfg) {
     [
       ['Spine', ['Spine']], ['Spine01', ['Spine1', 'Spine01']],
       ['Spine02', ['Spine2', 'Spine02']], ['neck', ['Neck']],
-      ['Head', ['Head']], ['LeftArm', ['LeftArm']],
-      ['RightArm', ['RightArm']], ['LeftForeArm', ['LeftForeArm']],
+      ['Head', ['Head']], ['LeftShoulder', ['LeftShoulder']], ['RightShoulder', ['RightShoulder']],
+      ['LeftArm', ['LeftArm']], ['RightArm', ['RightArm']], ['LeftForeArm', ['LeftForeArm']],
       ['RightForeArm', ['RightForeArm']]
     ].forEach(([key, aliases]) => {
       const b = lwFindBone(idleMap, aliases);
@@ -1221,12 +1235,22 @@ function animAvatar(av, dt, spd, now) {
       const spine = idle.Spine02;
       const neck = idle.neck;
       const head = idle.Head;
-      if (spine) spine.bone.rotation.x = spine.x + Math.sin(t * 1.35) * 0.012;
-      if (neck) neck.bone.rotation.y = neck.y + Math.sin(t * 0.7) * 0.018;
-      if (head) head.bone.rotation.x = head.x + Math.sin(t * 1.1 + 0.8) * 0.012;
+      if (spine) spine.bone.rotation.x = spine.x + Math.sin(t * 1.15) * 0.009;
+      if (neck) neck.bone.rotation.y = neck.y + Math.sin(t * 0.65) * 0.014;
+      if (head) head.bone.rotation.x = head.x + Math.sin(t * 0.9 + 0.8) * 0.009;
+      // Relax the shoulders slightly instead of leaving the GLB in its wide
+      // authoring/rest pose. Forearms get a subtle natural bend at idle.
+      [['LeftShoulder', -0.13], ['RightShoulder', 0.13]].forEach(([name, amount]) => {
+        const item = idle[name];
+        if (item) item.bone.rotation.z = item.z + amount + Math.sin(t * 0.8) * 0.008;
+      });
       ['LeftArm', 'RightArm'].forEach((name) => {
         const item = idle[name];
-        if (item) item.bone.rotation.z = item.z + (name === 'LeftArm' ? -0.035 : 0.035) + Math.sin(t * 1.25) * 0.008;
+        if (item) item.bone.rotation.z = item.z + (name === 'LeftArm' ? -0.025 : 0.025);
+      });
+      ['LeftForeArm', 'RightForeArm'].forEach((name) => {
+        const item = idle[name];
+        if (item) item.bone.rotation.x = item.x + 0.035 + Math.sin(t * 0.75) * 0.006;
       });
     } else if (av.idleBones) {
       Object.values(av.idleBones).forEach((item) => {
