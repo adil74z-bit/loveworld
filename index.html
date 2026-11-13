@@ -49,6 +49,9 @@ button { cursor: pointer; }
 #hud > * { pointer-events: auto; }
 .chip-t { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); top: 12px; padding: 7px 13px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 14px; font-weight: 500; max-width: 62vw; pointer-events: none !important; }
 #partnerChip { top: 48px; font-size: 12.5px; color: var(--muted); }
+#partnerMiniMap { position: absolute; top: 92px; right: max(12px, env(safe-area-inset-right, 0px)); width: 112px; height: 112px; opacity: .4; pointer-events: none; z-index: 9; border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,.75); box-shadow: 0 4px 16px rgba(0,0,0,.22); }
+#partnerMiniMap canvas { display: block; width: 100%; height: 100%; }
+#partnerMiniMapLabel { position: absolute; top: 5px; left: 0; right: 0; text-align: center; color: #fff; font: 600 9px system-ui,sans-serif; text-shadow: 0 1px 3px #000; letter-spacing: .06em; }
 #fps { top: 84px; font-size: 12px; }
 .rbtn { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--line); background: var(--chip); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 24px; display: grid; place-items: center; padding: 0; }
 .rbtn:active { transform: scale(.93); background: rgba(255, 107, 139, .35); }
@@ -208,6 +211,10 @@ button { cursor: pointer; }
 <div id="hud" hidden>
   <div class="chip-t" id="zoneChip">Love Island</div>
   <div class="chip-t" id="partnerChip"></div>
+  <div id="partnerMiniMap" hidden aria-label="Mini map showing your partner's location">
+    <canvas id="partnerMiniMapCanvas" width="112" height="112"></canvas>
+    <div id="partnerMiniMapLabel">PARTNER</div>
+  </div>
   <div class="chip-t" id="fps" hidden></div>
   <div id="topRight">
     <button class="rbtn" id="mapBtn" aria-label="Map">&#128506;&#65039;</button>
@@ -2170,7 +2177,7 @@ function update(dt, t) {
   // hud
   hudT += dt;
   if (hudT > 0.15) {
-    hudT = 0; updateHud();
+    hudT = 0; updateHud(); drawPartnerMiniMap();
     nearI = findNearest(); const ab = $('actBtn');
     if (nearI) { ab.hidden = false; ab.innerHTML = '<span class="ai">' + nearI.icon + '</span><span>' + nearI.label + '</span>'; } else ab.hidden = true;
     Net.tick();
@@ -2229,6 +2236,27 @@ function updateHud() {
   if (pc.textContent !== ptxt) pc.textContent = ptxt;
 }
 function sceneName(sc) { return { w: 'outside', house: 'at home', museum: 'in the museum', cinema: 'at the cinema' }[sc] || ''; }
+function drawPartnerMiniMap() {
+  const wrap = $('partnerMiniMap'), cv = $('partnerMiniMapCanvas');
+  if (!wrap || !cv) return;
+  let peer = null;
+  others.forEach((o) => { if (o.shown && o.sc === sceneCode()) peer = o; });
+  if (!peer || S.mode !== 'world') { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  const c = cv.getContext('2d'), w = cv.width, h = cv.height, cx = w / 2, cy = h / 2;
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = 'rgba(12, 24, 38, .40)'; c.fillRect(0, 0, w, h);
+  c.strokeStyle = 'rgba(255,255,255,.38)'; c.lineWidth = 1;
+  c.beginPath(); c.arc(cx, cy, 43, 0, Math.PI * 2); c.stroke();
+  c.beginPath(); c.moveTo(cx - 43, cy); c.lineTo(cx + 43, cy); c.moveTo(cx, cy - 43); c.lineTo(cx, cy + 43); c.stroke();
+  // Player position is the centre; partner is plotted relative to the player.
+  const range = 70, scale = 43 / range;
+  const dx = (peer.x - S.px) * scale, dy = (peer.z - S.pz) * scale;
+  const dist = Math.hypot(dx, dy), factor = dist > 39 ? 39 / dist : 1;
+  c.fillStyle = '#ffffff'; c.beginPath(); c.arc(cx, cy, 4, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#ff6b9a'; c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+  c.beginPath(); c.arc(cx + dx * factor, cy + dy * factor, 6, 0, Math.PI * 2); c.fill(); c.stroke();
+}
 
 /* ---------- panels ---------- */
 let panelKind = null, wardTab = 'look', decorTab = 'items';
