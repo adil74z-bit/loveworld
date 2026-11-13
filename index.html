@@ -1964,20 +1964,33 @@ function updateCamera(dt) {
       cameraCollisionRay.set(cameraCollisionOrigin, cameraCollisionDirection);
       cameraCollisionRay.near = 0.3;
       cameraCollisionRay.far = wantedDistance;
+      // Raycast only live meshes. Recursive raycasting against whole scene
+      // groups can encounter stale/null children and stop the render loop.
       const targets = [];
-      if (chunkRoot) {
-        for (let i = 0; i < chunkRoot.children.length; i++) {
-          const obj = chunkRoot.children[i];
-          if (obj.visible) targets.push(obj);
+      const addRaycastMeshes = (root) => {
+        if (!root || !root.visible) return;
+        if (root.isMesh && root.geometry && root.matrixWorld) {
+          try { root.updateWorldMatrix(true, false); } catch (_) {}
+          if (root.matrixWorld) targets.push(root);
         }
-      }
+        const children = Array.isArray(root.children) ? root.children.slice() : [];
+        for (let i = 0; i < children.length; i++) {
+          const child = children[i];
+          if (child) addRaycastMeshes(child);
+        }
+      };
+      if (chunkRoot) addRaycastMeshes(chunkRoot);
       for (let i = 0; i < anchors.length; i++) {
         const obj = anchors[i];
         if (!obj || !obj.visible || obj.isSprite) continue;
         const dx = obj.position.x - r[0], dz = obj.position.z - r[1];
-        if (dx * dx + dz * dz < (wantedDistance + 12) * (wantedDistance + 12)) targets.push(obj);
+        if (dx * dx + dz * dz < (wantedDistance + 12) * (wantedDistance + 12)) addRaycastMeshes(obj);
       }
-      const hits = cameraCollisionRay.intersectObjects(targets, true);
+      let hits = [];
+      if (targets.length) {
+        try { hits = cameraCollisionRay.intersectObjects(targets, false); }
+        catch (err) { console.warn('[Love World] skipped invalid camera collision raycast:', err); }
+      }
       if (hits.length) {
         const safeDistance = Math.max(0.85, hits[0].distance - 0.32);
         if (safeDistance < wantedDistance) {
