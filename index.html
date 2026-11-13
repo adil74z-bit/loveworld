@@ -49,6 +49,9 @@ button { cursor: pointer; }
 #hud > * { pointer-events: auto; }
 .chip-t { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); top: 12px; padding: 7px 13px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 14px; font-weight: 500; max-width: 62vw; pointer-events: none !important; }
 #partnerChip { top: 48px; font-size: 12.5px; color: var(--muted); }
+#partnerMiniMap { position: absolute; top: 92px; right: max(12px, env(safe-area-inset-right, 0px)); width: 112px; height: 112px; opacity: .4; pointer-events: none; z-index: 9; border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,.75); box-shadow: 0 4px 16px rgba(0,0,0,.22); }
+#partnerMiniMap canvas { display: block; width: 100%; height: 100%; }
+#partnerMiniMapLabel { position: absolute; top: 5px; left: 0; right: 0; text-align: center; color: #fff; font: 600 9px system-ui,sans-serif; text-shadow: 0 1px 3px #000; letter-spacing: .06em; }
 #fps { top: 84px; font-size: 12px; }
 .rbtn { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--line); background: var(--chip); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 24px; display: grid; place-items: center; padding: 0; }
 .rbtn:active { transform: scale(.93); background: rgba(255, 107, 139, .35); }
@@ -68,7 +71,7 @@ button { cursor: pointer; }
 #toast.on { opacity: 1; transform: translate(-50%, 0); }
 #fade { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none !important; transition: opacity .2s; z-index: 35; }
 #fade.on { opacity: .85; }
-#err { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 60; padding: 10px 12px; border-radius: 12px; background: #7a1d3a; color: #fff; font-size: 12px; user-select: text; -webkit-user-select: text; }
+#err { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 60; padding: 10px 12px; border-radius: 12px; background: #7a1d3a; color: #fff; font-size: 12px; user-select: text; -webkit-user-select: text; display: flex; align-items: center; justify-content: space-between; gap: 12px; } #errReload { flex: none; border: 1px solid rgba(255,255,255,.5); border-radius: 10px; padding: 9px 12px; background: #fff; color: #501329; font: 600 13px var(--font); }
 
 /* decor bar */
 #decorBar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; padding: 6px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); backdrop-filter: blur(8px); }
@@ -208,6 +211,10 @@ button { cursor: pointer; }
 <div id="hud" hidden>
   <div class="chip-t" id="zoneChip">Love Island</div>
   <div class="chip-t" id="partnerChip"></div>
+  <div id="partnerMiniMap" hidden aria-label="Mini map showing your partner's location">
+    <canvas id="partnerMiniMapCanvas" width="112" height="112"></canvas>
+    <div id="partnerMiniMapLabel">PARTNER</div>
+  </div>
   <div class="chip-t" id="fps" hidden></div>
   <div id="topRight">
     <button class="rbtn" id="mapBtn" aria-label="Map">&#128506;&#65039;</button>
@@ -232,7 +239,7 @@ button { cursor: pointer; }
 </div>
 <div id="toast" role="status"></div>
 <div id="fade"></div>
-<div id="err" hidden></div>
+<div id="err" hidden role="alert"><span id="errText"></span><button id="errReload" type="button" hidden>Reload safely</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -836,9 +843,10 @@ function emojiSprite(e, s) {
 let sunDir;
 function initScene(host) {
   renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.matchMedia('(max-width: 800px)').matches ? 1.15 : 1.5));
   renderer.setSize(host.clientWidth || window.innerWidth, host.clientHeight || window.innerHeight);
   host.appendChild(renderer.domElement);
+  renderer.domElement.addEventListener('webglcontextlost', (event) => { event.preventDefault(); pauseForSafety('The phone browser lost its 3D graphics memory. Reload safely to restore the game.'); }, false);
   scene = new THREE.Scene();
   fogObj = new THREE.Fog(0xffd8c4, 120, 520);
   scene.fog = fogObj;
@@ -1148,39 +1156,37 @@ function loadCharacterModel(av, cfg) {
 
     const holder = new THREE.Group();
     const model = gltf.scene;
-    const sourceHeight = sex === 'female' ? 1.68 : 1.80;
-    const targetHeight = sex === 'female' ? 1.74 : 1.75;
-    model.scale.setScalar(targetHeight / sourceHeight);
     model.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(model);
+    const size = bounds.getSize(new THREE.Vector3());
+    const sourceHeight = Math.max(size.y, 0.001);
+    const targetHeight = sex === 'female' ? 1.70 : 1.75;
+    const scale = targetHeight / sourceHeight;
+    model.scale.setScalar(scale);
+    model.position.y = -bounds.min.y * scale;
+    // The supplied avatars face +Z, which matches Love World's forward direction.
     holder.add(model);
     av.root.add(holder);
 
     av.modelHolder = holder;
     av.modelRoot = model;
     av.body.visible = false;
-    av.tag.position.y = 1.98;
+    av.tag.position.y = 2.02;
     av.mixer = new THREE.AnimationMixer(model);
+    av.clipActions = {};
     av.walkAction = null;
     av.runAction = null;
+    av.idleAction = null;
     av.activeAction = null;
-    av.idleBones = {};
-    const idleMap = lwBuildBoneMap(model);
-    [
-      ['Spine', ['Spine']], ['Spine01', ['Spine1', 'Spine01']],
-      ['Spine02', ['Spine2', 'Spine02']], ['neck', ['Neck']],
-      ['Head', ['Head']], ['LeftShoulder', ['LeftShoulder']], ['RightShoulder', ['RightShoulder']],
-      ['LeftArm', ['LeftArm']], ['RightArm', ['RightArm']], ['LeftForeArm', ['LeftForeArm']],
-      ['RightForeArm', ['RightForeArm']]
-    ].forEach(([key, aliases]) => {
-      const b = lwFindBone(idleMap, aliases);
-      if (b) av.idleBones[key] = { bone: b, x: b.rotation.x, y: b.rotation.y, z: b.rotation.z };
-    });
     (gltf.animations || []).forEach((clip) => {
-      const key = String(clip.name || '').toLowerCase();
-      if (key.indexOf('walk') >= 0) av.walkAction = av.mixer.clipAction(clip);
-      if (key.indexOf('run') >= 0) av.runAction = av.mixer.clipAction(clip);
+      const key = String(clip.name || '').toLowerCase().replace(/[^a-z]/g, '');
+      const action = av.mixer.clipAction(clip);
+      av.clipActions[key] = action;
+      if (key.indexOf('idle') >= 0) av.idleAction = action;
+      if (key.indexOf('walk') >= 0) av.walkAction = action;
+      if (key.indexOf('run') >= 0) av.runAction = action;
     });
-    applyGlbWardrobe(av, cfg, model);
+    console.info('[Love World] loaded ' + sex + ' avatar:', sourceHeight.toFixed(2) + 'm, ' + (gltf.animations || []).length + ' animations');
   }, undefined, (err) => {
     console.warn('Love World character model could not load:', url, err);
   });
@@ -1225,8 +1231,19 @@ function setVehicle(av, id) {
 /* ---------- animation ---------- */
 function animAvatar(av, dt, spd, now) {
   if (av.mixer) {
-    const wanted = spd > 0.12 ? ((spd > 5.5 && av.runAction) ? av.runAction : av.walkAction) : null;
-    if (wanted !== av.activeAction) { if (av.activeAction) av.activeAction.fadeOut(0.16); av.activeAction = wanted; if (wanted) wanted.reset().fadeIn(0.16).play(); }
+    let wanted = null;
+    if (av.emote && av.clipActions) {
+      const emoteKey = ({ wave: 'wave', dance: 'dance', hug: 'hug', heart: 'heart', greeting: 'greeting' })[av.emote.id];
+      if (emoteKey && av.clipActions[emoteKey]) wanted = av.clipActions[emoteKey];
+    }
+    if (!wanted && av.sit && av.clipActions && av.clipActions.sit) wanted = av.clipActions.sit;
+    if (!wanted && spd > 0.12) wanted = (spd > 5.5 && av.runAction) ? av.runAction : av.walkAction;
+    if (!wanted) wanted = av.idleAction || null;
+    if (wanted !== av.activeAction) {
+      if (av.activeAction) av.activeAction.fadeOut(0.18);
+      av.activeAction = wanted;
+      if (wanted) wanted.reset().fadeIn(0.18).play();
+    }
     av.mixer.update(dt);
     if (!wanted && av.idleBones) {
       const t = now || 0;
@@ -1305,7 +1322,10 @@ function showEmote(av, id, now) {
   av.emote = { id, t0: now };
   if (av.emoteSp) { av.root.remove(av.emoteSp); }
   av.emoteSp = emojiSprite(def.e, 0.85); av.emoteSp.position.set(0, 2.75, 0); av.root.add(av.emoteSp);
-  setTimeout(() => { if (av.emoteSp && (!av.emote || av.emote.t0 !== now)) { av.root.remove(av.emoteSp); av.emoteSp = null; } }, def.dur * 1000 + 100);
+  setTimeout(() => {
+    if (av.emote && av.emote.t0 === now) av.emote = null;
+    if (av.emoteSp && (!av.emote || av.emote.t0 !== now)) { av.root.remove(av.emoteSp); av.emoteSp = null; }
+  }, def.dur * 1000 + 100);
 }
 
 /* ---------- chat bubble ---------- */
@@ -1752,7 +1772,7 @@ function toast(msg, ms) {
   const t = $('toast'); t.textContent = msg; t.classList.add('on');
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), ms || 2400);
 }
-function showErr(m) { const e = $('err'); e.hidden = false; e.textContent = 'Oops: ' + m; }
+function showErr(m) { const e = $('err'); e.hidden = false; const t = $('errText'); if (t) t.textContent = 'Oops: ' + m; else e.textContent = 'Oops: ' + m; }
 window.addEventListener('error', (ev) => showErr((ev.message || 'error') + (ev.lineno ? ' (line ' + ev.lineno + ')' : '')));
 window.addEventListener('unhandledrejection', (ev) => { try { showErr(String(ev.reason && ev.reason.message || ev.reason)); } catch (e) { } });
 
@@ -1796,12 +1816,33 @@ function initInput() {
   }
   el.addEventListener('pointerdown', (e) => {
     try { el.setPointerCapture(e.pointerId); } catch (er) { }
-    if (S.decor && S.mode === 'interior' && S.interior === 'house') {
+    if (S.decor && S.mode === 'interior' && S.interior === 'house' && INT.house && INT.house.itemsRoot) {
+      // Raycast only live Mesh objects. A removed/rebuilt decoration can leave
+      // a stale object in a traversal snapshot; Three.js r128 then crashes
+      // inside Mesh.raycast while reading matrixWorld.
+      const root = INT.house.itemsRoot;
+      root.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
+      const targets = [];
+      const collectMeshes = (node) => {
+        if (!node || !node.children) return;
+        if (node.isMesh && node.geometry && node.matrixWorld) targets.push(node);
+        const children = node.children.slice();
+        for (let i = 0; i < children.length; i++) collectMeshes(children[i]);
+      };
+      collectMeshes(root);
       ray.setFromCamera(ndc(e), camera);
-      const hits = ray.intersectObjects(INT.house.itemsRoot.children, true);
+      let hits = [];
+      if (targets.length) {
+        try { hits = ray.intersectObjects(targets, false); }
+        catch (err) { console.warn('[Love World] skipped invalid decor raycast target:', err); }
+      }
       if (hits.length) {
-        let o = hits[0].object; while (o && o.userData.idx === undefined) o = o.parent;
-        if (o) { selIdx = o.userData.idx; updateSelRing(); dragItem = true; dragMoved = false; camId = null; stickId = null; decorRefresh(); return; }
+        let o = hits[0].object;
+        while (o && o.userData.idx === undefined) o = o.parent;
+        if (o && Number.isInteger(o.userData.idx) && houseState.items[o.userData.idx]) {
+          selIdx = o.userData.idx; updateSelRing(); dragItem = true; dragMoved = false; camId = null; stickId = null; decorRefresh(); return;
+        }
       }
     }
     const rect = el.getBoundingClientRect();
@@ -1845,7 +1886,7 @@ function initInput() {
   });
   window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; if (e.key === 'Shift') S.run = $('runBtn').classList.contains('on'); });
   window.addEventListener('resize', onResize);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { saveLocal(); Net.savePlayer(true); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { try { saveLocal(); } catch (e) {} try { Net.savePlayer(true); } catch (e) {} stopFrameLoop(); } else { startFrameLoop(); } });
 }
 function onResize() {
   if (!renderer) return;
@@ -1931,20 +1972,33 @@ function updateCamera(dt) {
       cameraCollisionRay.set(cameraCollisionOrigin, cameraCollisionDirection);
       cameraCollisionRay.near = 0.3;
       cameraCollisionRay.far = wantedDistance;
+      // Raycast only live meshes. Recursive raycasting against whole scene
+      // groups can encounter stale/null children and stop the render loop.
       const targets = [];
-      if (chunkRoot) {
-        for (let i = 0; i < chunkRoot.children.length; i++) {
-          const obj = chunkRoot.children[i];
-          if (obj.visible) targets.push(obj);
+      const addRaycastMeshes = (root) => {
+        if (!root || !root.visible) return;
+        if (root.isMesh && root.geometry && root.matrixWorld) {
+          try { root.updateWorldMatrix(true, false); } catch (_) {}
+          if (root.matrixWorld) targets.push(root);
         }
-      }
+        const children = Array.isArray(root.children) ? root.children.slice() : [];
+        for (let i = 0; i < children.length; i++) {
+          const child = children[i];
+          if (child) addRaycastMeshes(child);
+        }
+      };
+      if (chunkRoot) addRaycastMeshes(chunkRoot);
       for (let i = 0; i < anchors.length; i++) {
         const obj = anchors[i];
         if (!obj || !obj.visible || obj.isSprite) continue;
         const dx = obj.position.x - r[0], dz = obj.position.z - r[1];
-        if (dx * dx + dz * dz < (wantedDistance + 12) * (wantedDistance + 12)) targets.push(obj);
+        if (dx * dx + dz * dz < (wantedDistance + 12) * (wantedDistance + 12)) addRaycastMeshes(obj);
       }
-      const hits = cameraCollisionRay.intersectObjects(targets, true);
+      let hits = [];
+      if (targets.length) {
+        try { hits = cameraCollisionRay.intersectObjects(targets, false); }
+        catch (err) { console.warn('[Love World] skipped invalid camera collision raycast:', err); }
+      }
       if (hits.length) {
         const safeDistance = Math.max(0.85, hits[0].distance - 0.32);
         if (safeDistance < wantedDistance) {
@@ -2117,7 +2171,7 @@ function update(dt, t) {
   // hud
   hudT += dt;
   if (hudT > 0.15) {
-    hudT = 0; updateHud();
+    hudT = 0; updateHud(); drawPartnerMiniMap();
     nearI = findNearest(); const ab = $('actBtn');
     if (nearI) { ab.hidden = false; ab.innerHTML = '<span class="ai">' + nearI.icon + '</span><span>' + nearI.label + '</span>'; } else ab.hidden = true;
     Net.tick();
@@ -2130,15 +2184,26 @@ function update(dt, t) {
     if (fps < 22 && S.quality > 0) { fpsLow++; if (fpsLow >= 2) { fpsLow = 0; setQuality(S.quality - 1); toast('Graphics lowered for smoother play'); } } else fpsLow = 0;
   }
 }
+let safetyPaused = false, frameRunning = false, frameId = 0, consecutiveFrameErrors = 0;
+function stopFrameLoop() { frameRunning = false; if (frameId) cancelAnimationFrame(frameId); frameId = 0; }
+function startFrameLoop() { if (frameRunning || safetyPaused || !ready || document.hidden) return; frameRunning = true; last = 0; frameId = requestAnimationFrame(frame); }
+function pauseForSafety(message) {
+  if (safetyPaused) return; safetyPaused = true; stopFrameLoop();
+  try { saveLocal(); } catch (e) {} try { Net.savePlayer(true); } catch (e) {}
+  const e = $('err'); e.hidden = false; $('errText').textContent = 'Game paused to protect your device. ' + message + ' Your local progress was saved where possible.'; $('errReload').hidden = false;
+}
 function frame(ms) {
-  requestAnimationFrame(frame);
-  if (!ready) return;
+  if (!frameRunning || safetyPaused || document.hidden) return;
+  frameId = requestAnimationFrame(frame);
+  if (last && ms - last > 3000) { pauseForSafety('The game stopped responding for too long. Reload safely to continue.'); return; }
   const dt = Math.min(0.05, Math.max(0.001, (ms - last) / 1000)); last = ms;
-  try { update(dt, ms / 1000); renderer.render(scene, camera); } catch (e) { if (!frame.err) { frame.err = 1; showErr(e.message + ' | ' + (e.stack || '').split('\n')[1]); } }
+  try { update(dt, ms / 1000); renderer.render(scene, camera); consecutiveFrameErrors = 0; }
+  catch (e) { consecutiveFrameErrors++; showErr((e.message || '3D frame error') + ' | ' + ((e.stack || '').split('\n')[1] || '')); if (consecutiveFrameErrors >= 2) pauseForSafety('Repeated 3D errors were detected. Reload safely to restart.'); }
 }
 function setQuality(q) {
   S.quality = clamp(q, 0, 2); QR = [2, 3, 4][S.quality];
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [1, 1.25, 1.5][S.quality]));
+  const mobileCap = window.matchMedia('(max-width: 800px)').matches ? 1.15 : 1.5;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [1, 1.25, 1.5][S.quality], mobileCap));
   onResize(); setFogRange();
 }
 let pinsDirty = true;
@@ -2165,6 +2230,27 @@ function updateHud() {
   if (pc.textContent !== ptxt) pc.textContent = ptxt;
 }
 function sceneName(sc) { return { w: 'outside', house: 'at home', museum: 'in the museum', cinema: 'at the cinema' }[sc] || ''; }
+function drawPartnerMiniMap() {
+  const wrap = $('partnerMiniMap'), cv = $('partnerMiniMapCanvas');
+  if (!wrap || !cv) return;
+  let peer = null;
+  others.forEach((o) => { if (o.shown && o.sc === sceneCode()) peer = o; });
+  if (!peer || S.mode !== 'world') { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  const c = cv.getContext('2d'), w = cv.width, h = cv.height, cx = w / 2, cy = h / 2;
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = 'rgba(12, 24, 38, .40)'; c.fillRect(0, 0, w, h);
+  c.strokeStyle = 'rgba(255,255,255,.38)'; c.lineWidth = 1;
+  c.beginPath(); c.arc(cx, cy, 43, 0, Math.PI * 2); c.stroke();
+  c.beginPath(); c.moveTo(cx - 43, cy); c.lineTo(cx + 43, cy); c.moveTo(cx, cy - 43); c.lineTo(cx, cy + 43); c.stroke();
+  // Player position is the centre; partner is plotted relative to the player.
+  const range = 70, scale = 43 / range;
+  const dx = (peer.x - S.px) * scale, dy = (peer.z - S.pz) * scale;
+  const dist = Math.hypot(dx, dy), factor = dist > 39 ? 39 / dist : 1;
+  c.fillStyle = '#ffffff'; c.beginPath(); c.arc(cx, cy, 4, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#ff6b9a'; c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+  c.beginPath(); c.arc(cx + dx * factor, cy + dy * factor, 6, 0, Math.PI * 2); c.fill(); c.stroke();
+}
 
 /* ---------- panels ---------- */
 let panelKind = null, wardTab = 'look', decorTab = 'items';
@@ -2466,7 +2552,7 @@ function startGame(name) {
     initInput(); initDecorBar(); bindUi();
     S.yaw = 0; updatePins(); updateHud();
     ready = true; $('gate').hidden = true; $('hud').hidden = false;
-    requestAnimationFrame(frame);
+    startFrameLoop();
     toast('Welcome, ' + S.cfg.n + ' ♥', 3000);
     Net.init();
     setInterval(saveLocal, 8000);
@@ -2493,6 +2579,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('pickMale').onclick = () => { pickedSex = 'male'; lsSet('lw:sex', pickedSex); paintSex(); };
   $('pickFemale').onclick = () => { pickedSex = 'female'; lsSet('lw:sex', pickedSex); paintSex(); };
   paintSex();
+  $('errReload').onclick = () => location.reload();
   $('playBtn').onclick = () => { $('welcomeView').hidden = true; $('roomView').hidden = false; $('nameIn0').focus(); };
   $('roomBackBtn').onclick = () => { $('roomView').hidden = true; $('welcomeView').hidden = false; };
   $('pasteCodeBtn').onclick = async () => {
