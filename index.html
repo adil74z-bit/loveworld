@@ -116,24 +116,80 @@ button { cursor: pointer; }
 .mrow { text-align: left; border: 1px solid var(--line); background: rgba(255, 255, 255, .07); padding: 9px 12px; border-radius: 12px; font-size: 14px; overflow-wrap: anywhere; }
 .mrow.off { opacity: .45; }
 @media (prefers-reduced-motion: reduce) { .float, #loading .heart { animation: none; } #panel { transition: none; } }
+
+/* Love Island phase 1: cinematic welcome + private room gate */
+#gate{isolation:isolate;background:#21152d;display:grid;place-items:center;padding:24px;overflow:hidden}
+#gate::before{content:"";position:absolute;inset:-18px;z-index:-2;background:url("https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=2400&q=85") center 52%/cover no-repeat;filter:blur(5px) brightness(.62) saturate(1.12);transform:scale(1.04)}
+#gate::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(22,12,34,.35),rgba(29,12,39,.16) 48%,rgba(18,12,35,.48)),linear-gradient(0deg,rgba(22,12,34,.55),transparent 58%,rgba(22,12,34,.18))}
+#gate .float{display:none}
+#gateCard{width:min(100%,680px);gap:18px;padding:clamp(24px,5vw,54px);border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;text-align:center}
+#gateCard h1{font-size:clamp(42px,8vw,82px);line-height:.98;letter-spacing:1px;text-shadow:0 5px 28px rgba(0,0,0,.38);font-weight:600}
+#gateCard h1 span{display:block;color:#ffb1d1;font-size:.62em;letter-spacing:5px;margin-top:12px}
+#gateCard p{font-size:clamp(15px,2vw,19px);color:#fff0f6;text-shadow:0 2px 12px #28132f;margin:18px auto 26px;max-width:460px}
+.gate-kicker{font-size:11px;letter-spacing:4px;color:#ffe2ef;font-weight:600;margin-bottom:20px;text-shadow:0 2px 10px #25132f}
+.welcome-play{min-width:min(280px,80vw);padding:17px 30px;font-size:19px;border-radius:999px;background:linear-gradient(110deg,#f25ca4,#ff9d9d 55%,#ffd18b);color:#38152c;box-shadow:0 12px 34px rgba(237,75,151,.35),inset 0 1px 0 rgba(255,255,255,.55)}
+.welcome-play span{margin-left:18px}
+.gate-foot{margin-top:30px;font-size:11px;letter-spacing:2.5px;color:#ffe5f0;text-shadow:0 2px 10px #24132e}
+#roomView{width:min(100%,440px);margin:auto;text-align:left;padding:22px 0 0}
+#roomView .room-title{font-size:clamp(34px,7vw,52px);text-align:center}
+#roomView .room-title span{font-size:1em;letter-spacing:0}
+#roomView p{text-align:center;margin:12px auto 24px}
+#roomView .fld{color:#fff0f6;font-size:13px;margin:12px 0}
+#roomView .fld input{background:rgba(25,15,39,.48);border:1px solid rgba(255,255,255,.42);border-radius:999px;padding:15px 18px;color:white}
+#roomView .code-actions{gap:10px;margin-top:12px}
+#roomView .code-actions button,.paste-link,.back-link{border:1px solid rgba(255,255,255,.42);border-radius:999px;padding:12px 15px;background:rgba(34,19,48,.48);color:#fff;font-size:13px;backdrop-filter:blur(10px)}
+#roomView .paste-link{display:block;margin:10px auto 0;border:0;background:transparent;color:#ffe0ed;text-decoration:underline}
+#roomView .back-link{margin-bottom:22px;padding:8px 14px}
+#roomView #goBtn{width:100%;margin-top:8px;border-radius:999px}
+#gateMsg{color:#ffe1ed}
+#loading{position:relative;z-index:2;width:min(92vw,520px);padding:30px 20px;text-align:center;justify-items:center;gap:12px;color:#fff}
+.reunion{height:170px;width:min(100%,390px);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.reunion-person{font-size:100px;line-height:1;filter:drop-shadow(0 8px 18px rgba(0,0,0,.3));position:absolute;top:24px}
+.reunion-person.boy{left:7%;animation:boyArrive 2.2s ease-in-out infinite alternate}
+.reunion-person.girl{right:7%;animation:girlArrive 2.2s ease-in-out infinite alternate}
+.reunion-heart{font-size:48px;color:#ff8fbd;z-index:2;animation:heartBeat .8s ease-in-out infinite alternate;text-shadow:0 0 24px #ff4fa0}
+@keyframes boyArrive{to{left:31%;transform:rotate(-8deg)}}@keyframes girlArrive{to{right:31%;transform:rotate(8deg)}}@keyframes heartBeat{to{transform:scale(1.28)}}
+.loading-title{font-size:22px;font-weight:600}.loading-sub{font-size:14px;color:#ffe0ed}
+.loading-track{height:7px;width:min(280px,75vw);background:rgba(255,255,255,.22);border-radius:99px;overflow:hidden;margin-top:10px}
+.loading-track span{display:block;height:100%;width:35%;border-radius:99px;background:linear-gradient(90deg,#ff6eaa,#ffd18b);animation:loadSweep 1.8s ease-in-out infinite}
+@keyframes loadSweep{to{width:100%}}
+@media(max-width:560px){#gateCard{padding:22px 8px}#gateCard h1{font-size:clamp(38px,11vw,58px)}.reunion{height:140px}.reunion-person{font-size:78px}}
+@media(prefers-reduced-motion:reduce){.reunion-person,.reunion-heart,.loading-track span{animation:none}}
+
 </style></head><body>
 
 <div id="stage"></div>
 
 <div id="gate">
-  <span class="float" style="left:8%;animation-delay:-1s">&#10084;&#65039;</span><span class="float" style="left:24%;animation-delay:-5s;font-size:20px">&#128149;</span>
-  <span class="float" style="left:48%;animation-delay:-3s;font-size:34px">&#128158;</span><span class="float" style="left:70%;animation-delay:-7s;font-size:22px">&#10084;&#65039;</span>
-  <span class="float" style="left:88%;animation-delay:-2s">&#128147;</span>
   <div id="gateCard">
-    <h1>Love <span>World</span></h1>
-    <p>Only the two of us can come in.</p>
-    <label class="fld">Your name<input id="nameIn0" maxlength="14" autocomplete="off" placeholder="Adil"></label>
-    <label class="fld">Private invitation code<input id="codeIn" type="password" autocomplete="off" maxlength="64" placeholder="Generate or paste your 32-character code"></label>
-    <div class="code-actions"><button type="button" id="makeCodeBtn">Generate secure code</button><button type="button" id="copyCodeBtn">Copy code</button></div>
-    <div id="gateMsg" role="status"></div>
-    <button class="pri" id="goBtn">Enter our world</button>
+    <section id="welcomeView">
+      <div class="gate-kicker">A PRIVATE ISLAND FOR TWO</div>
+      <h1>LOVE ISLAND <span>FOR YOU</span></h1>
+      <p>Escape together. Explore together. Make memories.</p>
+      <button class="pri welcome-play" id="playBtn">Play Now <span aria-hidden="true">➜</span></button>
+      <div class="gate-foot">JUST YOU, YOUR PERSON &amp; YOUR ISLAND ♡</div>
+    </section>
+    <section id="roomView" hidden>
+      <button type="button" class="back-link" id="roomBackBtn">← Back</button>
+      <div class="gate-kicker">YOUR PRIVATE SPACE</div>
+      <h1 class="room-title">Join <span>Our Island</span></h1>
+      <p>Enter your name and invitation code to meet your partner.</p>
+      <label class="fld">Your name<input id="nameIn0" maxlength="14" autocomplete="off" placeholder="Your name"></label>
+      <label class="fld">Private invitation code<input id="codeIn" type="password" autocomplete="off" maxlength="64" placeholder="Paste your invitation code"></label>
+      <div class="code-actions">
+        <button type="button" id="makeCodeBtn">✦ Generate Code</button>
+        <button type="button" id="copyCodeBtn">▣ Copy Code</button>
+      </div>
+      <button type="button" class="paste-link" id="pasteCodeBtn">Paste code from clipboard</button>
+      <div id="gateMsg" role="status"></div>
+      <button class="pri" id="goBtn">Enter Our Island ♡</button>
+    </section>
   </div>
-  <div id="loading" hidden><div class="heart">&#128149;</div><div>Building our world&hellip;</div></div>
+  <div id="loading" hidden>
+    <div class="reunion" aria-hidden="true"><span class="reunion-person boy">♂</span><span class="reunion-heart">♥</span><span class="reunion-person girl">♀</span></div>
+    <div class="loading-title">A little world, just for two</div><div class="loading-sub">Preparing your island…</div>
+    <div class="loading-track"><span></span></div>
+  </div>
 </div>
 
 <div id="hud" hidden>
@@ -2161,6 +2217,12 @@ function bindUi() {
 }
 window.addEventListener('DOMContentLoaded', () => {
   const n = lsGet('lw:name'); if (n) $('nameIn0').value = n;
+  $('playBtn').onclick = () => { $('welcomeView').hidden = true; $('roomView').hidden = false; $('nameIn0').focus(); };
+  $('roomBackBtn').onclick = () => { $('roomView').hidden = true; $('welcomeView').hidden = false; };
+  $('pasteCodeBtn').onclick = async () => {
+    try { const t = await navigator.clipboard.readText(); if (t) { $('codeIn').value = t.trim(); $('codeIn').type = 'text'; $('gateMsg').textContent = 'Invitation code pasted.'; } }
+    catch (e) { $('gateMsg').textContent = 'Clipboard access unavailable. Long-press the code field and choose Paste.'; }
+  };
   $('goBtn').onclick = tryEnter;
   $('makeCodeBtn').onclick = () => {
     const bytes = new Uint8Array(24); crypto.getRandomValues(bytes);
