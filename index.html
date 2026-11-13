@@ -68,7 +68,7 @@ button { cursor: pointer; }
 #toast.on { opacity: 1; transform: translate(-50%, 0); }
 #fade { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none !important; transition: opacity .2s; z-index: 35; }
 #fade.on { opacity: .85; }
-#err { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 60; padding: 10px 12px; border-radius: 12px; background: #7a1d3a; color: #fff; font-size: 12px; user-select: text; -webkit-user-select: text; }
+#err { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 60; padding: 10px 12px; border-radius: 12px; background: #7a1d3a; color: #fff; font-size: 12px; user-select: text; -webkit-user-select: text; display: flex; align-items: center; justify-content: space-between; gap: 12px; } #errReload { flex: none; border: 1px solid rgba(255,255,255,.5); border-radius: 10px; padding: 9px 12px; background: #fff; color: #501329; font: 600 13px var(--font); }
 
 /* decor bar */
 #decorBar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; padding: 6px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); backdrop-filter: blur(8px); }
@@ -232,7 +232,7 @@ button { cursor: pointer; }
 </div>
 <div id="toast" role="status"></div>
 <div id="fade"></div>
-<div id="err" hidden></div>
+<div id="err" hidden role="alert"><span id="errText"></span><button id="errReload" type="button" hidden>Reload safely</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -836,9 +836,10 @@ function emojiSprite(e, s) {
 let sunDir;
 function initScene(host) {
   renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.matchMedia('(max-width: 800px)').matches ? 1.15 : 1.5));
   renderer.setSize(host.clientWidth || window.innerWidth, host.clientHeight || window.innerHeight);
   host.appendChild(renderer.domElement);
+  renderer.domElement.addEventListener('webglcontextlost', (event) => { event.preventDefault(); pauseForSafety('The phone browser lost its 3D graphics memory. Reload safely to restore the game.'); }, false);
   scene = new THREE.Scene();
   fogObj = new THREE.Fog(0xffd8c4, 120, 520);
   scene.fog = fogObj;
@@ -1770,7 +1771,7 @@ function toast(msg, ms) {
   const t = $('toast'); t.textContent = msg; t.classList.add('on');
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), ms || 2400);
 }
-function showErr(m) { const e = $('err'); e.hidden = false; e.textContent = 'Oops: ' + m; }
+function showErr(m) { const e = $('err'); e.hidden = false; const t = $('errText'); if (t) t.textContent = 'Oops: ' + m; else e.textContent = 'Oops: ' + m; }
 window.addEventListener('error', (ev) => showErr((ev.message || 'error') + (ev.lineno ? ' (line ' + ev.lineno + ')' : '')));
 window.addEventListener('unhandledrejection', (ev) => { try { showErr(String(ev.reason && ev.reason.message || ev.reason)); } catch (e) { } });
 
@@ -1884,7 +1885,7 @@ function initInput() {
   });
   window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; if (e.key === 'Shift') S.run = $('runBtn').classList.contains('on'); });
   window.addEventListener('resize', onResize);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { saveLocal(); Net.savePlayer(true); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { try { saveLocal(); } catch (e) {} try { Net.savePlayer(true); } catch (e) {} stopFrameLoop(); } else { startFrameLoop(); } });
 }
 function onResize() {
   if (!renderer) return;
@@ -2182,15 +2183,26 @@ function update(dt, t) {
     if (fps < 22 && S.quality > 0) { fpsLow++; if (fpsLow >= 2) { fpsLow = 0; setQuality(S.quality - 1); toast('Graphics lowered for smoother play'); } } else fpsLow = 0;
   }
 }
+let safetyPaused = false, frameRunning = false, frameId = 0, consecutiveFrameErrors = 0;
+function stopFrameLoop() { frameRunning = false; if (frameId) cancelAnimationFrame(frameId); frameId = 0; }
+function startFrameLoop() { if (frameRunning || safetyPaused || !ready || document.hidden) return; frameRunning = true; last = 0; frameId = requestAnimationFrame(frame); }
+function pauseForSafety(message) {
+  if (safetyPaused) return; safetyPaused = true; stopFrameLoop();
+  try { saveLocal(); } catch (e) {} try { Net.savePlayer(true); } catch (e) {}
+  const e = $('err'); e.hidden = false; $('errText').textContent = 'Game paused to protect your device. ' + message + ' Your local progress was saved where possible.'; $('errReload').hidden = false;
+}
 function frame(ms) {
-  requestAnimationFrame(frame);
-  if (!ready) return;
+  if (!frameRunning || safetyPaused || document.hidden) return;
+  frameId = requestAnimationFrame(frame);
+  if (last && ms - last > 3000) { pauseForSafety('The game stopped responding for too long. Reload safely to continue.'); return; }
   const dt = Math.min(0.05, Math.max(0.001, (ms - last) / 1000)); last = ms;
-  try { update(dt, ms / 1000); renderer.render(scene, camera); } catch (e) { if (!frame.err) { frame.err = 1; showErr(e.message + ' | ' + (e.stack || '').split('\n')[1]); } }
+  try { update(dt, ms / 1000); renderer.render(scene, camera); consecutiveFrameErrors = 0; }
+  catch (e) { consecutiveFrameErrors++; showErr((e.message || '3D frame error') + ' | ' + ((e.stack || '').split('\n')[1] || '')); if (consecutiveFrameErrors >= 2) pauseForSafety('Repeated 3D errors were detected. Reload safely to restart.'); }
 }
 function setQuality(q) {
   S.quality = clamp(q, 0, 2); QR = [2, 3, 4][S.quality];
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [1, 1.25, 1.5][S.quality]));
+  const mobileCap = window.matchMedia('(max-width: 800px)').matches ? 1.15 : 1.5;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [1, 1.25, 1.5][S.quality], mobileCap));
   onResize(); setFogRange();
 }
 let pinsDirty = true;
@@ -2518,7 +2530,7 @@ function startGame(name) {
     initInput(); initDecorBar(); bindUi();
     S.yaw = 0; updatePins(); updateHud();
     ready = true; $('gate').hidden = true; $('hud').hidden = false;
-    requestAnimationFrame(frame);
+    startFrameLoop();
     toast('Welcome, ' + S.cfg.n + ' ♥', 3000);
     Net.init();
     setInterval(saveLocal, 8000);
@@ -2545,6 +2557,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('pickMale').onclick = () => { pickedSex = 'male'; lsSet('lw:sex', pickedSex); paintSex(); };
   $('pickFemale').onclick = () => { pickedSex = 'female'; lsSet('lw:sex', pickedSex); paintSex(); };
   paintSex();
+  $('errReload').onclick = () => location.reload();
   $('playBtn').onclick = () => { $('welcomeView').hidden = true; $('roomView').hidden = false; $('nameIn0').focus(); };
   $('roomBackBtn').onclick = () => { $('roomView').hidden = true; $('welcomeView').hidden = false; };
   $('pasteCodeBtn').onclick = async () => {
