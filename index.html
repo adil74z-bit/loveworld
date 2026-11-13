@@ -1148,39 +1148,37 @@ function loadCharacterModel(av, cfg) {
 
     const holder = new THREE.Group();
     const model = gltf.scene;
-    const sourceHeight = sex === 'female' ? 1.68 : 1.80;
-    const targetHeight = sex === 'female' ? 1.74 : 1.75;
-    model.scale.setScalar(targetHeight / sourceHeight);
     model.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(model);
+    const size = bounds.getSize(new THREE.Vector3());
+    const sourceHeight = Math.max(size.y, 0.001);
+    const targetHeight = sex === 'female' ? 1.70 : 1.75;
+    const scale = targetHeight / sourceHeight;
+    model.scale.setScalar(scale);
+    model.position.y = -bounds.min.y * scale;
+    // The supplied avatars face +Z, which matches Love World's forward direction.
     holder.add(model);
     av.root.add(holder);
 
     av.modelHolder = holder;
     av.modelRoot = model;
     av.body.visible = false;
-    av.tag.position.y = 1.98;
+    av.tag.position.y = 2.02;
     av.mixer = new THREE.AnimationMixer(model);
+    av.clipActions = {};
     av.walkAction = null;
     av.runAction = null;
+    av.idleAction = null;
     av.activeAction = null;
-    av.idleBones = {};
-    const idleMap = lwBuildBoneMap(model);
-    [
-      ['Spine', ['Spine']], ['Spine01', ['Spine1', 'Spine01']],
-      ['Spine02', ['Spine2', 'Spine02']], ['neck', ['Neck']],
-      ['Head', ['Head']], ['LeftShoulder', ['LeftShoulder']], ['RightShoulder', ['RightShoulder']],
-      ['LeftArm', ['LeftArm']], ['RightArm', ['RightArm']], ['LeftForeArm', ['LeftForeArm']],
-      ['RightForeArm', ['RightForeArm']]
-    ].forEach(([key, aliases]) => {
-      const b = lwFindBone(idleMap, aliases);
-      if (b) av.idleBones[key] = { bone: b, x: b.rotation.x, y: b.rotation.y, z: b.rotation.z };
-    });
     (gltf.animations || []).forEach((clip) => {
-      const key = String(clip.name || '').toLowerCase();
-      if (key.indexOf('walk') >= 0) av.walkAction = av.mixer.clipAction(clip);
-      if (key.indexOf('run') >= 0) av.runAction = av.mixer.clipAction(clip);
+      const key = String(clip.name || '').toLowerCase().replace(/[^a-z]/g, '');
+      const action = av.mixer.clipAction(clip);
+      av.clipActions[key] = action;
+      if (key.indexOf('idle') >= 0) av.idleAction = action;
+      if (key.indexOf('walk') >= 0) av.walkAction = action;
+      if (key.indexOf('run') >= 0) av.runAction = action;
     });
-    applyGlbWardrobe(av, cfg, model);
+    console.info('[Love World] loaded ' + sex + ' avatar:', sourceHeight.toFixed(2) + 'm, ' + (gltf.animations || []).length + ' animations');
   }, undefined, (err) => {
     console.warn('Love World character model could not load:', url, err);
   });
@@ -1188,7 +1186,7 @@ function loadCharacterModel(av, cfg) {
 function setAvatarCfg(av, cfg) {
   const parent = av.root.parent, pos = av.root.position.clone(), ry = av.root.rotation.y;
   const veh = av.vehicle, sit = av.sit, old = av.root;
-  const n = buildProceduralAvatar(cfg); Object.assign(av, n);
+  const n = buildAvatar(cfg); Object.assign(av, n);
   av.sit = sit; av.vehicle = 0; av.vehGroup = null;
   av.root.position.copy(pos); av.root.rotation.y = ry;
   if (parent) { parent.remove(old); parent.add(av.root); }
@@ -1225,8 +1223,19 @@ function setVehicle(av, id) {
 /* ---------- animation ---------- */
 function animAvatar(av, dt, spd, now) {
   if (av.mixer) {
-    const wanted = spd > 0.12 ? ((spd > 5.5 && av.runAction) ? av.runAction : av.walkAction) : null;
-    if (wanted !== av.activeAction) { if (av.activeAction) av.activeAction.fadeOut(0.16); av.activeAction = wanted; if (wanted) wanted.reset().fadeIn(0.16).play(); }
+    let wanted = null;
+    if (av.emote && av.clipActions) {
+      const emoteKey = ({ wave: 'wave', dance: 'dance', hug: 'hug', heart: 'heart', greeting: 'greeting' })[av.emote.id];
+      if (emoteKey && av.clipActions[emoteKey]) wanted = av.clipActions[emoteKey];
+    }
+    if (!wanted && av.sit && av.clipActions && av.clipActions.sit) wanted = av.clipActions.sit;
+    if (!wanted && spd > 0.12) wanted = (spd > 5.5 && av.runAction) ? av.runAction : av.walkAction;
+    if (!wanted) wanted = av.idleAction || null;
+    if (wanted !== av.activeAction) {
+      if (av.activeAction) av.activeAction.fadeOut(0.18);
+      av.activeAction = wanted;
+      if (wanted) wanted.reset().fadeIn(0.18).play();
+    }
     av.mixer.update(dt);
     if (!wanted && av.idleBones) {
       const t = now || 0;
@@ -1305,7 +1314,10 @@ function showEmote(av, id, now) {
   av.emote = { id, t0: now };
   if (av.emoteSp) { av.root.remove(av.emoteSp); }
   av.emoteSp = emojiSprite(def.e, 0.85); av.emoteSp.position.set(0, 2.75, 0); av.root.add(av.emoteSp);
-  setTimeout(() => { if (av.emoteSp && (!av.emote || av.emote.t0 !== now)) { av.root.remove(av.emoteSp); av.emoteSp = null; } }, def.dur * 1000 + 100);
+  setTimeout(() => {
+    if (av.emote && av.emote.t0 === now) av.emote = null;
+    if (av.emoteSp && (!av.emote || av.emote.t0 !== now)) { av.root.remove(av.emoteSp); av.emoteSp = null; }
+  }, def.dur * 1000 + 100);
 }
 
 /* ---------- chat bubble ---------- */
