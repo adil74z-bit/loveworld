@@ -1015,13 +1015,7 @@ function buildProceduralAvatar(cfg) {
   return av;
 }
 
-function buildAvatar(cfg) {
-  // Keep the procedural avatar as an immediate fallback, then replace its
-  // visible body with the supplied male.glb / female.glb once loaded.
-  const av = buildProceduralAvatar(cfg);
-  loadCharacterModel(av, cfg);
-  return av;
-}
+function buildAvatar(cfg) { return buildProceduralAvatar(cfg); }
 
 function lwBoneKey(name) {
   return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^mixamorig/, '');
@@ -1200,7 +1194,7 @@ function loadCharacterModel(av, cfg) {
 function setAvatarCfg(av, cfg) {
   const parent = av.root.parent, pos = av.root.position.clone(), ry = av.root.rotation.y;
   const veh = av.vehicle, sit = av.sit, old = av.root;
-  const n = buildAvatar(cfg); Object.assign(av, n);
+  const n = buildProceduralAvatar(cfg); Object.assign(av, n);
   av.sit = sit; av.vehicle = 0; av.vehGroup = null;
   av.root.position.copy(pos); av.root.rotation.y = ry;
   if (parent) { parent.remove(old); parent.add(av.root); }
