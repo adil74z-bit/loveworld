@@ -1007,7 +1007,13 @@ function buildProceduralAvatar(cfg) {
   return av;
 }
 
-function buildAvatar(cfg) { return buildProceduralAvatar(cfg); }
+function buildAvatar(cfg) {
+  // Keep the procedural avatar as an immediate fallback, then replace its
+  // visible body with the supplied male.glb / female.glb once loaded.
+  const av = buildProceduralAvatar(cfg);
+  loadCharacterModel(av, cfg);
+  return av;
+}
 
 function lwBoneKey(name) {
   return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^mixamorig/, '');
