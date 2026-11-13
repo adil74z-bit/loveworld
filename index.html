@@ -1808,12 +1808,33 @@ function initInput() {
   }
   el.addEventListener('pointerdown', (e) => {
     try { el.setPointerCapture(e.pointerId); } catch (er) { }
-    if (S.decor && S.mode === 'interior' && S.interior === 'house') {
+    if (S.decor && S.mode === 'interior' && S.interior === 'house' && INT.house && INT.house.itemsRoot) {
+      // Raycast only live Mesh objects. A removed/rebuilt decoration can leave
+      // a stale object in a traversal snapshot; Three.js r128 then crashes
+      // inside Mesh.raycast while reading matrixWorld.
+      const root = INT.house.itemsRoot;
+      root.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
+      const targets = [];
+      const collectMeshes = (node) => {
+        if (!node || !node.children) return;
+        if (node.isMesh && node.geometry && node.matrixWorld) targets.push(node);
+        const children = node.children.slice();
+        for (let i = 0; i < children.length; i++) collectMeshes(children[i]);
+      };
+      collectMeshes(root);
       ray.setFromCamera(ndc(e), camera);
-      const hits = ray.intersectObjects(INT.house.itemsRoot.children, true);
+      let hits = [];
+      if (targets.length) {
+        try { hits = ray.intersectObjects(targets, false); }
+        catch (err) { console.warn('[Love World] skipped invalid decor raycast target:', err); }
+      }
       if (hits.length) {
-        let o = hits[0].object; while (o && o.userData.idx === undefined) o = o.parent;
-        if (o) { selIdx = o.userData.idx; updateSelRing(); dragItem = true; dragMoved = false; camId = null; stickId = null; decorRefresh(); return; }
+        let o = hits[0].object;
+        while (o && o.userData.idx === undefined) o = o.parent;
+        if (o && Number.isInteger(o.userData.idx) && houseState.items[o.userData.idx]) {
+          selIdx = o.userData.idx; updateSelRing(); dragItem = true; dragMoved = false; camId = null; stickId = null; decorRefresh(); return;
+        }
       }
     }
     const rect = el.getBoundingClientRect();
